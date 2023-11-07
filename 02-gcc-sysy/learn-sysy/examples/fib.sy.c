@@ -1,3 +1,4 @@
+// 定义常量
 const int I_DONT_KNOW = -1;
 // 定义函数
 int fib(int val) {
