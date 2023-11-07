@@ -1,5 +1,6 @@
 #include <assert.h>
 int a = 3;
+// sysy中并没有定义assert的实现, 这里的assert只是说明不同作用域中下的`a`是不同的
 
 int main() {
   // 作用域

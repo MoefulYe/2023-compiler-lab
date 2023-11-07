@@ -1,7 +1,7 @@
 const int I_DONT_KNOW = -1;
-
 // 定义函数
 int fib(int val) {
+  // 分支语句
   if (val == 0) {
     return 0;
   } else if (val == 1) {
