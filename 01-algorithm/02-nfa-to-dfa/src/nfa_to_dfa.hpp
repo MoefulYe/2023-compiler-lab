@@ -125,9 +125,9 @@ struct Bitset {
 
   Iterator end() const { return Iterator(0, 64); }
 
-  // 0,2,4, ...
   static Bitset from_string(string_view str) {
     auto bitset = Bitset();
+    assert(str.front() == '{' && str.back() == '}');
     str = str.substr(1, str.size() - 2);
     while (!str.empty()) {
       auto pos = str.find(',');
@@ -313,36 +313,4 @@ vector<string_view> split_line(string_view line) {
     line = line.substr(pos < line.size() ? pos + 1 : pos);
   }
   return ret;
-}
-
-/// start
-/// end
-/// total
-/// symbols
-/// 1,2 0,3
-
-int main(int argc, char *argv[]) {
-  char buf[256];
-  std::cin.getline(buf, 256);
-  auto set = Bitset::from_string(buf);
-  auto start = atoi(buf);
-  std::cin.getline(buf, 256);
-  auto end = atoi(buf);
-  std::cin.getline(buf, 256);
-  auto total = atoi(buf);
-  std::cin.getline(buf, 256);
-  auto symbols = std::string(buf);
-  auto nfa = NFA(start, end, total);
-  for (int i = 0; i < total; i++) {
-    std::cin.getline(buf, 256);
-    auto tokens = split_line(buf);
-    auto to = NFA::State::Trans();
-    for (int j = 0; j < tokens.size(); j++) {
-      to[symbols[j]] = Bitset::from_string(tokens[j]);
-    }
-    nfa.states.push_back(NFA::State{to});
-  }
-
-  auto dfa = DFA::from_nfa(nfa, symbols);
-  return 0;
 }

@@ -41,9 +41,9 @@ public:
     // 对于正则表达式生成的nfa来说, 每一个节点至多有两个出边
     struct Adj : array<AdjEnrty, 2> {
       void insert(char via, Node *to) {
-        if (auto entry0 = this->at(0); !entry0.valid) {
+        if (auto &entry0 = this->at(0); !entry0.valid) {
           entry0 = AdjEnrty(via, to);
-        } else if (auto entry1 = this->at(1); !entry1.valid) {
+        } else if (auto &entry1 = this->at(1); !entry1.valid) {
           entry1 = AdjEnrty(via, to);
         } else {
           assert(false);
@@ -64,25 +64,26 @@ public:
       } else {
         this->id = allocator;
         allocator++;
-        if (auto entry0 = this->adj.at(0); entry0.valid) {
+        if (auto &entry0 = this->adj.at(0); entry0.valid) {
           entry0.to->alloc_state(allocator);
         }
-        if (auto entry1 = this->adj.at(1); entry1.valid) {
+        if (auto &entry1 = this->adj.at(1); entry1.valid) {
           entry1.to->alloc_state(allocator);
         }
       }
     }
 
-    void print(unordered_set<Node *> visited) {
+    void print(unordered_set<Node *> &visited) {
       if (visited.find(this) != visited.end()) {
         return;
       }
-      if (auto entry0 = this->adj.at(0); entry0.valid) {
+      visited.insert(this);
+      if (auto &entry0 = this->adj.at(0); entry0.valid) {
         std::cout << this->id << "--" << entry0.via << "-->" << entry0.to->id
                   << std::endl;
         entry0.to->print(visited);
       }
-      if (auto entry1 = this->adj.at(1); entry1.valid) {
+      if (auto &entry1 = this->adj.at(1); entry1.valid) {
         std::cout << this->id << "--" << entry1.via << "-->" << entry1.to->id
                   << std::endl;
         entry1.to->print(visited);
@@ -102,8 +103,8 @@ public:
   }
   void print() {
     auto visited = unordered_set<Node *>();
-    std::cout << "start:" << this->start->id << std::endl;
-    std::cout << "end:" << this->end->id << std::endl;
+    std::cout << "start: " << this->start->id << std::endl;
+    std::cout << "end: " << this->end->id << std::endl;
     this->start->print(visited);
   }
 };
