@@ -1,7 +1,10 @@
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <initializer_list>
 #include <iostream>
 #include <iterator>
 #include <optional>
@@ -17,7 +20,6 @@
 using std::function;
 using std::make_pair;
 using std::optional;
-using std::regex;
 using std::set;
 using std::sregex_token_iterator;
 using std::stack;
@@ -26,55 +28,77 @@ using std::string_view;
 using std::unordered_map;
 using std::vector;
 
+struct Util {
+  // 用空格符分割不以'\n'结尾的字符串
+  static vector<string_view> split_line(string_view line) {
+    auto ret = vector<string_view>();
+    while (!line.empty()) {
+      auto pos = line.find(' ');
+      if (pos == string_view::npos) {
+        pos = line.size();
+      }
+      ret.push_back(line.substr(0, pos));
+      line = line.substr(pos < line.size() ? pos + 1 : pos);
+    }
+    return ret;
+  }
+};
+
 struct Bitset {
   uint64_t content;
   Bitset() : content(0) {}
   Bitset(uint64_t content) : content(content) {}
-  Bitset(const Bitset &bitmap) : content(bitmap.content) {}
-  Bitset &operator=(const Bitset &bitmap) {
-    content = bitmap.content;
+  Bitset(const Bitset &bitset) : content(bitset.content) {}
+  Bitset &operator=(const Bitset &bitset) {
+    content = bitset.content;
     return *this;
+  }
+  Bitset(std::initializer_list<int> list) {
+    *this = 0;
+    for (auto item : list) {
+      this->insert(item);
+    }
   }
 
-  Bitset operator|(const Bitset &bitmap) const {
-    return Bitset(content | bitmap.content);
+  Bitset operator|(const Bitset &bitset) const {
+    return Bitset(content | bitset.content);
   }
-  Bitset operator&(const Bitset &bitmap) const {
-    return Bitset(content & bitmap.content);
+  Bitset operator&(const Bitset &bitset) const {
+    return Bitset(content & bitset.content);
   }
   Bitset operator~() const { return Bitset(~content); }
-  Bitset operator^(const Bitset &bitmap) const {
-    return Bitset(content ^ bitmap.content);
+  Bitset operator^(const Bitset &bitset) const {
+    return Bitset(content ^ bitset.content);
   }
-  Bitset &operator|=(const Bitset &bitmap) {
-    content |= bitmap.content;
+  Bitset &operator|=(const Bitset &bitset) {
+    content |= bitset.content;
     return *this;
   }
-  Bitset &operator&=(const Bitset &bitmap) {
-    content &= bitmap.content;
+  Bitset &operator&=(const Bitset &bitset) {
+    content &= bitset.content;
     return *this;
   }
-  Bitset &operator^=(const Bitset &bitmap) {
-    content ^= bitmap.content;
+  Bitset &operator^=(const Bitset &bitset) {
+    content ^= bitset.content;
     return *this;
   }
-  bool operator==(const Bitset &bitmap) const {
-    return content == bitmap.content;
+  bool operator==(const Bitset &bitset) const {
+    return content == bitset.content;
   }
-  bool operator!=(const Bitset &bitmap) const {
-    return content != bitmap.content;
+  bool operator!=(const Bitset &bitset) const {
+    return content != bitset.content;
   }
-  bool operator<(const Bitset &bitmap) const {
-    return content < bitmap.content;
+  bool operator<(const Bitset &bitset) const {
+    return content < bitset.content;
   }
-  bool operator>(const Bitset &bitmap) const {
-    return content > bitmap.content;
+  bool operator>(const Bitset &bitset) const {
+    return content > bitset.content;
   }
-  bool operator<=(const Bitset &bitmap) const {
-    return content <= bitmap.content;
+  bool operator<=(const Bitset &bitset) const {
+    return content <= bitset.content;
   }
-  bool operator>=(const Bitset &bitmap) const {
-    return content >= bitmap.content;
+  bool operator>=(const Bitset &bitset) const {
+    return content >= bitset.content;
   }
 
   bool contains(int i) const {
@@ -128,7 +152,8 @@ struct Bitset {
   static Bitset from_string(string_view str) {
     auto bitset = Bitset();
     assert(str.front() == '{' && str.back() == '}');
-    str = str.substr(1, str.size() - 2);
+    str.remove_prefix(1);
+    str.remove_suffix(1);
     while (!str.empty()) {
       auto pos = str.find(',');
       if (pos == string_view::npos) {
@@ -143,13 +168,12 @@ struct Bitset {
 };
 
 constexpr uint64_t MAX_NFA_STATE = sizeof(uint64_t) * 8;
-
 constexpr char EPSILON = '#';
 
 struct NFA {
   struct State {
     // 对于一个节点和给定的输入符号, 可以转移到的下一个节点的集合的映射
-    typedef unordered_map<char, Bitset> Trans;
+    using Trans = unordered_map<char, Bitset>;
     Trans to;
   };
   // 起始状态的编号
@@ -158,65 +182,84 @@ struct NFA {
   int end;
   // 状态集合
   vector<State> states;
-  NFA(int start, int end, int total) : start(start), end(end), states(total) {}
+  std::string symbols;
+  NFA(int start, int end, int total, std::string &&symbols)
+      : start(start), end(end), states(total), symbols(symbols) {}
+
+  Bitset epsilon_closure(int id) {
+    auto closure = Bitset{id};
+    auto s = stack<int>();
+    s.push(id);
+    while (!s.empty()) {
+      auto state = s.top();
+      s.pop();
+      for (auto i : this->states.at(state).to[EPSILON]) {
+        if (!closure.contains(i)) {
+          closure.insert(i);
+          s.push(i);
+        }
+      }
+    }
+    return closure;
+  }
+  Bitset epsilon_closure(Bitset set) {
+    auto closure = set;
+    auto s = stack<int>();
+    for (auto i : set) {
+      s.push(i);
+    }
+    while (!s.empty()) {
+      auto state = s.top();
+      s.pop();
+      for (auto i : this->states.at(state).to[EPSILON]) {
+        if (!closure.contains(i)) {
+          closure.insert(i);
+          s.push(i);
+        }
+      }
+    }
+    return closure;
+  }
+
+  Bitset move(int id, char c) { return this->states.at(id).to[c]; }
+  Bitset move(Bitset set, char c) {
+    auto move_set = Bitset();
+    for (auto i : set) {
+      move_set |= this->states.at(i).to[c];
+    }
+    return move_set;
+  }
+
+  //<start>
+  //<end>
+  //<total>
+  //<symbols> ...
+  //<trans> ...
+  //...
+
+  static NFA *from_stdin() {
+    char buf[256];
+    std::cin.getline(buf, 256);
+    auto start = atoi(buf);
+    std::cin.getline(buf, 256);
+    auto end = atoi(buf);
+    std::cin.getline(buf, 256);
+    auto total = atoi(buf);
+    std::cin.getline(buf, 256);
+    auto symbols = std::string(buf);
+    auto nfa = new NFA(start, end, total, std::move(symbols));
+    for (int i = 0; i < total; i++) {
+      std::cin.getline(buf, 256);
+      auto tokens = Util::split_line(buf);
+      auto to = NFA::State::Trans();
+      for (int j = 0; j < tokens.size(); j++) {
+        to[symbols[j]] = Bitset::from_string(tokens[j]);
+      }
+      nfa->states.push_back(NFA::State{to});
+    }
+    return nfa;
+  }
 };
-
-// 为nfa状态编号和nfa状态位向量集合, 特化该模板
-template <typename T> Bitset epsilon_closure(const NFA &nfa, T t) {
-  assert(false);
-}
-
-template <> Bitset epsilon_closure(const NFA &nfa, int id) {
-  auto closure = Bitset().insert(id);
-  auto s = stack<int>();
-  s.push(id);
-  while (!s.empty()) {
-    auto state = s.top();
-    s.pop();
-    for (auto i : nfa.states.at(state).to.at(EPSILON)) {
-      if (!closure.contains(i)) {
-        closure.insert(i);
-        s.push(i);
-      }
-    }
-  }
-  return closure;
-}
-
-template <> Bitset epsilon_closure(const NFA &nfa, Bitset set) {
-  auto closure = set;
-  auto s = stack<int>();
-  for (auto i : set) {
-    s.push(i);
-  }
-  while (!s.empty()) {
-    auto state = s.top();
-    s.pop();
-    for (auto i : nfa.states.at(state).to.at(EPSILON)) {
-      if (!closure.contains(i)) {
-        closure.insert(i);
-        s.push(i);
-      }
-    }
-  }
-  return closure;
-}
-
-template <typename T> Bitset move(const NFA &nfa, T t, char c) {
-  assert(false);
-}
-
-template <> Bitset move(const NFA &nfa, int id, char c) {
-  return nfa.states.at(id).to.at(c);
-}
-
-template <> Bitset move(const NFA &nfa, Bitset set, char c) {
-  auto move_set = Bitset();
-  for (auto i : set) {
-    move_set |= nfa.states.at(i).to.at(c);
-  }
-  return move_set;
-}
 
 struct DFA {
   struct State {
@@ -249,8 +292,12 @@ struct DFA {
   State *start;
   set<State *> ends;
   set<State *> states;
+  std::string symbols;
 
-  DFA(State *s0) : start(s0), ends(), states() { states.insert(s0); }
+  DFA(State *s0, std::string symbols)
+      : start(s0), ends(), states(), symbols(symbols) {
+    states.insert(s0);
+  }
 
   optional<State *> find_state(function<bool(const State &s)> pred) {
     for (auto state : states) {
@@ -270,18 +317,18 @@ struct DFA {
     }
   }
 
-  static DFA *from_nfa(const NFA &nfa, std::string &symbols) {
-    auto s0 = new State(epsilon_closure(nfa, nfa.start));
-    auto dfa = new DFA(s0);
+  static DFA *from_nfa(NFA &nfa) {
+    auto s0 = new State(nfa.epsilon_closure(0));
+    auto dfa = new DFA(s0, nfa.symbols);
     auto to_solve = stack<State *>();
     to_solve.push(s0);
 
     while (!to_solve.empty()) {
       auto state = to_solve.top();
       to_solve.pop();
-      for (auto symbol : symbols) {
+      for (auto symbol : nfa.symbols) {
         auto move_closure =
-            epsilon_closure(nfa, move(nfa, state->nfa_states, symbol));
+            nfa.epsilon_closure(nfa.move(state->nfa_states, symbol));
         if (auto to = dfa->find_state([=](const State &state) -> bool {
               return state.nfa_states == move_closure;
             });
@@ -300,17 +347,3 @@ struct DFA {
     return dfa;
   }
 };
-
-// 用空格符分割不以'\n'结尾的字符串
-vector<string_view> split_line(string_view line) {
-  auto ret = vector<string_view>();
-  while (!line.empty()) {
-    auto pos = line.find(' ');
-    if (pos == string_view::npos) {
-      pos = line.size();
-    }
-    ret.push_back(line.substr(0, pos));
-    line = line.substr(pos < line.size() ? pos + 1 : pos);
-  }
-  return ret;
-}
