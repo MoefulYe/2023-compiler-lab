@@ -1,6 +1,7 @@
 #ifndef CFG_HPP
 #define CFG_HPP
 
+#include <cassert>
 #include <map>
 #include <optional>
 #include <string>
@@ -11,8 +12,7 @@
 // 1. 产生式的左部和右部用 "->" 分隔
 // 2. 右部的多个候选项用 "|" 分隔
 // 3. 终结符用单个小写字母表示
-// 4. 非终结符用单个大写字母表示, 后面可以跟随任意数量的'，
-// A和A'是不同的非终结符
+// 4. 非终结符用单个大写字母表示
 // 5. ~ 表示空串
 
 using std::optional;
@@ -26,13 +26,17 @@ static constexpr string_view OR = "|";
 static constexpr string_view ARROW = "->";
 
 struct Symbol {
+  char symbol;
   virtual optional<string_view> match(string_view input) = 0;
-  virtual string to_expr() = 0;
+  virtual ~Symbol() = 0;
+  char to_char() { return this->symbol; }
+  Symbol(char symbol) : symbol(symbol) {}
 };
 
 struct Terminal : public Symbol {
-  char symbol;
-  Terminal(char symbol) : symbol(symbol) {}
+  Terminal(char symbol) : Symbol(symbol) {
+    assert(symbol >= 'a' && symbol <= 'z');
+  }
   optional<string_view> match(string_view input) override {
     if (input.empty()) {
       return {};
@@ -42,24 +46,27 @@ struct Terminal : public Symbol {
       return {};
     }
   }
-  string to_expr() override { return string(1, symbol); }
 };
 
 struct Nonterminal : public Symbol {
   using Production = vector<Symbol *>;
-  string symbol;
   vector<Production> productions;
-  Nonterminal(string symbol) : symbol(symbol) {}
+  Nonterminal(char symbol) : Symbol(symbol) {
+    assert(symbol >= 'A' && symbol <= 'Z');
+  }
   optional<string_view> match(string_view input) override { return {}; }
-  string to_expr() override {
-    string expr;
-    expr += symbol;
-    expr += "->";
-    for (auto &production : productions) {
-      for (auto &symbol : production) {
-        expr += symbol->to_expr();
+  string to_expr() {
+    auto expr = string(1, symbol);
+    expr += ARROW;
+    for (int i = 0; i < this->productions.size(); i++) {
+      auto &production = this->productions.at(i);
+      if (i != 0) {
+        expr += OR;
       }
-      expr += "|";
+      for (int j = 0; j < production.size(); j++) {
+        auto symbol = production.at(j);
+        expr += symbol->to_char();
+      }
     }
     return expr;
   }
@@ -67,7 +74,7 @@ struct Nonterminal : public Symbol {
 
 struct Epsilon : public Symbol {
   optional<string_view> match(string_view input) override { return {input}; }
-  string to_expr() override { return string(EPSILON); }
+  Epsilon() : Symbol('~') {}
 };
 
 struct ContextFreeGrammar {

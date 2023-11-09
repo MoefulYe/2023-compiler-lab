@@ -1,9 +1,11 @@
 #include "../../common/CFG.hpp"
+#include "../../common/SymbolAllocator.hpp"
 
-optional<Nonterminal *> handle_direct(Nonterminal *to_handle);
+optional<Nonterminal *> handle_direct(Nonterminal *to_handle,
+                                      SymbolAllcator &allocator);
 void rewrite(Nonterminal *to_handle, Nonterminal *prefix);
 
-void left_recursion_kill(ContextFreeGrammar &cfg) {
+void left_recursion_kill(ContextFreeGrammar &cfg, SymbolAllcator &allocator) {
   auto &nonterminals = cfg.nonterminals;
   auto size = nonterminals.size();
   for (int i = 0; i < size; i++) {
@@ -12,7 +14,7 @@ void left_recursion_kill(ContextFreeGrammar &cfg) {
       auto a_j = nonterminals.at(j);
       rewrite(a_i, a_j);
     }
-    if (auto new_nonterminal = handle_direct(a_i);
+    if (auto new_nonterminal = handle_direct(a_i, allocator);
         new_nonterminal.has_value()) {
       nonterminals.push_back(new_nonterminal.value());
     }
@@ -21,7 +23,8 @@ void left_recursion_kill(ContextFreeGrammar &cfg) {
 
 // 消除直接左递归
 // 消除后可能会增加一个新的非终结符
-optional<Nonterminal *> handle_direct(Nonterminal *to_handle) {
+optional<Nonterminal *> handle_direct(Nonterminal *to_handle,
+                                      SymbolAllcator &allocator) {
   auto left_recursion_productions = vector<Nonterminal::Production>();
   auto no_left_recursion_productions = vector<Nonterminal::Production>();
   for (auto production : to_handle->productions) {
@@ -34,7 +37,7 @@ optional<Nonterminal *> handle_direct(Nonterminal *to_handle) {
   if (left_recursion_productions.empty()) {
     return {};
   } else {
-    auto new_nonterminal = new Nonterminal(to_handle->symbol + "'");
+    auto new_nonterminal = allocator.alloc_nonterminal();
     for (auto &production : no_left_recursion_productions) {
       production.push_back(new_nonterminal);
     }
@@ -42,7 +45,7 @@ optional<Nonterminal *> handle_direct(Nonterminal *to_handle) {
       production.erase(production.begin());
       production.push_back(new_nonterminal);
     }
-    left_recursion_productions.push_back({new Epsilon});
+    left_recursion_productions.push_back({allocator.get_or_alloc_epsilon()});
     to_handle->productions = no_left_recursion_productions;
     new_nonterminal->productions = left_recursion_productions;
     return {new_nonterminal};
