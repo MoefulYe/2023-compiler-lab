@@ -5,13 +5,15 @@
 #include <ostream>
 #include <vector>
 
-void test_parser(string_view input, string_view expect) {
-  auto actual = Parser(input).parse()->to_string();
-  std::cout << actual << std::endl;
-  EXPECT_EQ(actual, expect);
-}
+class ParserTester : public testing::Test {
+protected:
+  void test_parser(string_view input, string_view expect) {
+    auto actual = Parser(input).parse()->to_string();
+    EXPECT_EQ(actual, expect);
+  }
+};
 
-TEST(PARSER, PARSER1) {
+TEST_F(ParserTester, TestParser) {
   test_parser("111", "111");
   test_parser("1|1", "(1|1)");
   test_parser("1*", "(1)*");
