@@ -3,8 +3,11 @@
 void rewrite(ContextFreeGrammar &cfg, ContextFreeGrammar::Symbol a_i,
              ContextFreeGrammar::Symbol a_j);
 
+void handle_direct(ContextFreeGrammar &cfg,
+                   ContextFreeGrammar::Symbol to_handle);
+
 void left_recursion_kill(ContextFreeGrammar &cfg) {
-  auto nonterminals = cfg.get_terminals();
+  auto nonterminals = cfg.terminals();
   auto size = nonterminals.size();
   for (int i = 0; i < size; i++) {
     auto a_i = nonterminals.at(i);
@@ -12,6 +15,7 @@ void left_recursion_kill(ContextFreeGrammar &cfg) {
       auto a_j = nonterminals.at(j);
       rewrite(cfg, a_i, a_j);
     }
+    handle_direct(cfg, a_i);
   }
 }
 // 消除直接左递归

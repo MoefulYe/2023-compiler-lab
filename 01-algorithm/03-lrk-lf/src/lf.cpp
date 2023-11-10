@@ -36,7 +36,7 @@ struct TrieNode : map<ContextFreeGrammar::Symbol, TrieNode *> {
       for (auto [symbol, child] : *this) {
         rights.push_back(symbol + child->walk(cfg));
       }
-      return ContextFreeGrammar::ProductionRight(1, new_nonterm);
+      return ContextFreeGrammar::ProductionRight{new_nonterm};
     }
   }
 };
@@ -58,7 +58,7 @@ struct TrieTree {
 };
 
 void extract_left_factor(ContextFreeGrammar &cfg) {
-  auto non_terms = cfg.get_nonterminals();
+  auto non_terms = cfg.nonterminals();
   for (auto non_term : non_terms) {
     TrieTree(cfg, non_term).extract_left_factor();
   }
