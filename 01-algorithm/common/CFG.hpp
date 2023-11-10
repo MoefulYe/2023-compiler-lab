@@ -29,10 +29,9 @@ struct ContextFreeGrammar {
   using ProductionRight = string;
   using ProductionRights = vector<string>;
   using Productions = unordered_map<Symbol, ProductionRights>;
-  using TerminalSet = bitset<MAX_TERMINAL_NUM>;
-  using NonterminalSet = bitset<MAX_NONTERMINAL_NUM>;
   static constexpr Symbol EPSILON = '~';
   static constexpr char DIVISION = '|';
+  static constexpr char END = '$';
   static constexpr string_view ARROW = "->";
   static constexpr string_view START_PREFIX = "start: ";
   static constexpr string_view NONTERMINAL_SET_PREFIX = "nonterminals: ";
@@ -46,10 +45,73 @@ struct ContextFreeGrammar {
   }
   static bool is_epsilon(Symbol symbol) { return symbol == EPSILON; }
 
+  struct TerminalSet : bitset<MAX_TERMINAL_NUM> {
+    TerminalSet() {}
+    TerminalSet(string_view terminals) {
+      bitset<MAX_TERMINAL_NUM>::reset();
+      for (auto symbol : terminals) {
+        assert(is_terminal(symbol));
+        this->set(symbol);
+      }
+    }
+    bool get(Symbol symbol) { return (*this)[symbol - 'a']; }
+    void set(Symbol symbol) { bitset<MAX_TERMINAL_NUM>::set(symbol - 'a'); }
+    void reset(Symbol symbol) { bitset<MAX_TERMINAL_NUM>::reset(symbol - 'a'); }
+    string to_string() {
+      auto ret = string();
+      for (Symbol s = 'a'; s <= 'z'; s++) {
+        if (this->get(s)) {
+          ret += s;
+        }
+      }
+      return ret;
+    }
+  };
+
+  struct NonterminalSet : bitset<MAX_NONTERMINAL_NUM> {
+    NonterminalSet() {}
+    NonterminalSet(string_view nonterminals) {
+      bitset<MAX_NONTERMINAL_NUM>::reset();
+      for (auto symbol : nonterminals) {
+        assert(is_nonterminal(symbol));
+        this->set(symbol);
+      }
+    }
+    bool get(Symbol symbol) { return (*this)[symbol - 'A']; }
+    void set(Symbol symbol) { bitset<MAX_NONTERMINAL_NUM>::set(symbol - 'A'); }
+    void reset(Symbol symbol) {
+      bitset<MAX_NONTERMINAL_NUM>::reset(symbol - 'A');
+    }
+    string to_string(Symbol start) {
+      auto ret = string{start};
+      for (Symbol s = 'A'; s <= 'Z'; s++) {
+        if (this->get(s) && s != start) {
+          ret += s;
+        }
+      }
+      return ret;
+    }
+
+    void alloc(Symbol symbol) {
+      assert(is_nonterminal(symbol));
+      assert(!this->get(symbol));
+      this->set(symbol);
+    }
+
+    Symbol alloc() {
+      for (auto i = 'A'; i <= 'Z'; i++) {
+        if (!this->get(i)) {
+          this->set(i);
+          return i;
+        }
+      }
+      assert(false);
+    }
+  };
+
   ContextFreeGrammar(Symbol start, string_view nonterminals,
-                     string_view terminals) {
-    this->set_terminals(terminals);
-    this->set_nonterminals(nonterminals);
+                     string_view terminals)
+      : _terminals(terminals), _nonterminals(nonterminals) {
     this->_start = start;
     for (auto non_term : nonterminals) {
       this->_productions.insert({non_term, {}});
@@ -61,50 +123,17 @@ struct ContextFreeGrammar {
     return _productions.at(nonterminal);
   }
 
-  string get_terminals() {
-    auto ret = string();
-    for (int i = 0; i < this->_terminals.size(); i++) {
-      if (_terminals[i]) {
-        ret.push_back(i + 'a');
-      }
-    }
-    return ret;
-  }
+  string terminals() { return this->_terminals.to_string(); }
 
   // 第一项一定是起始符号
-  string get_nonterminals() {
-    auto ret = string{this->_start};
-    for (int i = 0; i < this->_nonterminals.size(); i++) {
-      if (_nonterminals[i]) {
-        auto symbol = i + 'A';
-        if (symbol != this->_start) {
-          ret.push_back(symbol);
-        }
-      }
-    }
-    return ret;
-  }
-
-  void set_terminals(string_view terminals) {
-    this->_terminals.reset();
-    for (auto terminal : terminals) {
-      this->_terminals.set(terminal - 'a');
-    }
-  }
-
-  void set_nonterminals(string_view nonterminals) {
-    this->_nonterminals.reset();
-    for (auto nonterminal : nonterminals) {
-      this->_nonterminals.set(nonterminal - 'A');
-    }
-  }
+  string nonterminals() { return this->_nonterminals.to_string(this->_start); }
 
   Symbol start() { return this->_start; }
 
   string to_string() {
     auto ret = string(START_PREFIX) + this->_start + '\n';
-    auto terminals = this->get_terminals();
-    auto nonterminals = this->get_nonterminals();
+    auto terminals = this->terminals();
+    auto nonterminals = this->nonterminals();
     ret += nonterminals + '\n';
     ret += terminals + '\n';
     for (auto left : nonterminals) {
@@ -122,22 +151,9 @@ struct ContextFreeGrammar {
     return ret;
   }
 
-  Symbol alloc_nonterminal() {
-    for (int i = 0; i < this->_nonterminals.size(); i++) {
-      if (auto symbol = i + 'A'; !_nonterminals[i]) {
-        _nonterminals.set(i);
-        _productions.insert({symbol, {}});
-        return symbol;
-      }
-    }
-    assert(false);
-  }
+  Symbol alloc_nonterminal() { return this->_nonterminals.alloc(); }
 
-  void alloc_nonterminal(Symbol nonterm) {
-    assert(is_nonterminal(nonterm));
-    assert(!this->_nonterminals[nonterm - 'A']);
-    this->_nonterminals.set(nonterm - 'A');
-  }
+  void alloc_nonterminal(Symbol nonterm) { this->_nonterminals.alloc(nonterm); }
 
 private:
   TerminalSet _terminals;
