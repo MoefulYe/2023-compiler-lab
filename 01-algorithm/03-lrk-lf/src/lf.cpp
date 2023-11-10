@@ -1,43 +1,65 @@
 #include "../../common/CFG.hpp"
-#include "../../common/SymbolAllocator.hpp"
-#include <unordered_map>
-#include <vector>
 
-using std::unordered_map;
+using std::map;
 
-struct TrieNode {
-  unordered_map<Symbol *, TrieNode *> children;
-  int childrens() { return children.size(); }
-  void insert(Symbol *symbol, TrieNode *node) { children[symbol] = node; }
-  TrieNode *via(Symbol *symbol) { return children[symbol]; }
-  TrieNode() {}
-  TrieNode(Nonterminal *root, SymbolAllcator &allocator) {
-    for (auto &production : root->productions) {
+struct TrieNode : map<ContextFreeGrammar::Symbol, TrieNode *> {
+  TrieNode(ContextFreeGrammar &cfg, ContextFreeGrammar::Symbol symbol)
+      : map<ContextFreeGrammar::Symbol, TrieNode *>() {
+    for (auto &right : cfg.produce(symbol)) {
       auto cur = this;
-      for (auto symbol : production) {
-        if (cur->children.find(symbol) == cur->children.end()) {
-          if (cur->childrens() == 0 && cur != this) {
-            this->insert(allocator.get_or_alloc_epsilon(), new TrieNode);
+      for (auto symbol : right) {
+        auto res = cur->find(symbol);
+        if (res == cur->end()) {
+          if (cur != this && cur->size() == 0) {
+            cur->insert({ContextFreeGrammar::EPSILON, new TrieNode});
           }
-          cur->insert(symbol, new TrieNode);
+          auto new_child = new TrieNode;
+          cur->insert({symbol, new_child});
+          cur = new_child;
+        } else {
+          cur = res->second;
         }
-        cur = cur->via(symbol);
       }
     }
   }
-  vector<Nonterminal *> to_productions(SymbolAllcator &allocator) {
-    auto ret = vector<Nonterminal *>();
-    for (auto &[symbol, node] : this->children) {
-      if (symbol == allocator.get_or_alloc_epsilon()) {
-        ret.push_back(nullptr);
-      } else {
-        auto productions = node->to_productions(allocator);
-        for (auto production : productions) {
-          production->insert(production->begin(), symbol);
-        }
-        ret.insert(ret.end(), productions.begin(), productions.end());
+
+  TrieNode() : map<ContextFreeGrammar::Symbol, TrieNode *>() {}
+  ContextFreeGrammar::ProductionRight walk(ContextFreeGrammar &cfg) {
+    if (this->size() == 0) {
+      return "";
+    } else if (this->size() == 1) {
+      auto [symbol, child] = *this->cbegin();
+      return symbol + child->walk(cfg);
+    } else {
+      auto new_nonterm = cfg.alloc_nonterminal();
+      auto &rights = cfg.produce(new_nonterm);
+      for (auto [symbol, child] : *this) {
+        rights.push_back(symbol + child->walk(cfg));
       }
+      return ContextFreeGrammar::ProductionRight(1, new_nonterm);
     }
-    return ret;
   }
 };
+
+struct TrieTree {
+  ContextFreeGrammar &cfg;
+  ContextFreeGrammar::Symbol symbol;
+  TrieNode root;
+  TrieTree(ContextFreeGrammar &cfg, ContextFreeGrammar::Symbol symbol)
+      : cfg(cfg), symbol(symbol), root(cfg, symbol){};
+
+  void extract_left_factor() {
+    auto &rights = cfg.produce(symbol);
+    rights.clear();
+    for (auto [symbol, child] : this->root) {
+      rights.push_back(symbol + child->walk(cfg));
+    }
+  }
+};
+
+void extract_left_factor(ContextFreeGrammar &cfg) {
+  auto non_terms = cfg.get_nonterminals();
+  for (auto non_term : non_terms) {
+    TrieTree(cfg, non_term).extract_left_factor();
+  }
+}
