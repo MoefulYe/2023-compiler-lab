@@ -1,3 +1,5 @@
+use crate::tokens::Token;
+
 pub mod parser;
 pub mod tokens;
 
@@ -7,5 +9,5 @@ extern crate nom;
 extern crate nom_locate;
 
 fn main() {
-    println!("Hello, world!");
+    println!("{}", Token::EqualEqual);
 }

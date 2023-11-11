@@ -1,10 +1,11 @@
 use crate::tokens::{ident_or_reserved, Token};
 use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::{alpha1, alphanumeric1, i32};
-use nom::combinator::{map, recognize};
-use nom::multi::many0_count;
-use nom::sequence::pair;
+use nom::bytes::complete::{tag, tag_no_case};
+use nom::character::complete::{alpha1, alphanumeric1, char, digit1, i32, one_of, u32};
+use nom::combinator::{map, map_res, opt, recognize};
+use nom::error::ErrorKind;
+use nom::multi::{many0_count, many1};
+use nom::sequence::{pair, tuple};
 use nom::{multi::fold_many0, IResult, Parser};
 use nom_locate::LocatedSpan;
 
@@ -93,7 +94,7 @@ mod lex_str {
         Parser,
     };
 
-    use super::{ParseResult, Span};
+    use super::{ParseResult, Span, Token};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum StringFragment<'a> {
@@ -128,7 +129,7 @@ mod lex_str {
         ))(input)
     }
 
-    pub fn lex(input: Span) -> ParseResult<String> {
+    pub fn lex(input: Span) -> ParseResult<Token> {
         let parse_inner = fold_many0(lex_fragment, String::new, |mut acc, fragment| {
             match fragment {
                 StringFragment::Literal(s) => acc.push_str(s),
@@ -136,17 +137,43 @@ mod lex_str {
             }
             acc
         });
-        delimited(char('"'), parse_inner, char('"'))(input)
+        map(delimited(char('"'), parse_inner, char('"')), Token::StrLit)(input)
+    }
+
+    #[cfg(test)]
+    mod test {
+        use crate::tokens::Token;
+
+        use super::lex;
+        use super::Span;
+        #[test]
+        fn test_str() {
+            assert_eq!(
+                lex(Span::new(r###""hello world""###)).unwrap().1,
+                Token::StrLit("hello world".to_owned())
+            );
+            assert_eq!(
+                lex(Span::new(r###""hello\nworld""###)).unwrap().1,
+                Token::StrLit("hello\nworld".to_owned())
+            );
+            assert_eq!(
+                lex(Span::new(r###""hello\tworld""###)).unwrap().1,
+                Token::StrLit("hello\tworld".to_owned())
+            );
+        }
     }
 }
 
 mod lex_char {
     use nom::branch::alt;
     use nom::character::complete::char;
+    use nom::combinator::map;
     use nom::combinator::value;
     use nom::sequence::delimited;
     use nom::sequence::preceded;
     use nom::Parser;
+
+    use crate::tokens::Token;
 
     use super::ParseResult;
     use super::Span;
@@ -164,12 +191,74 @@ mod lex_char {
     }
 
     fn lex_normal(input: Span) -> ParseResult<u8> {
-        nom::bytes::complete::take(1usize)
-            .parse(input)
-            .map(|(leftover, parsed)| (leftover, parsed.fragment().as_bytes()[0]))
+        let (leftover, parsed) = nom::bytes::complete::take(1usize).parse(input)?;
+        let ch = parsed.fragment().chars().next().unwrap();
+        assert!(ch.is_ascii(), "char literal must be ascii");
+        Ok((leftover, ch as u8))
     }
 
-    pub fn lex(input: Span) -> ParseResult<u8> {
-        delimited(char('\''), alt((lex_escaped, lex_normal)), char('\''))(input)
+    pub fn lex(input: Span) -> ParseResult<Token> {
+        map(
+            delimited(char('\''), alt((lex_escaped, lex_normal)), char('\'')),
+            Token::CharLit,
+        )(input)
+    }
+
+    #[cfg(test)]
+    mod test {
+        use crate::tokens::Token;
+
+        use super::lex;
+        use super::Span;
+        use nom::error::ErrorKind;
+        use nom::Err::Error;
+
+        #[test]
+        fn test_lex() {
+            assert_eq!(lex(Span::new("'a'")).unwrap().1, Token::CharLit(b'a'));
+            assert_eq!(lex(Span::new("'\\n'")).unwrap().1, Token::CharLit(b'\n'));
+            assert_eq!(lex(Span::new("'\\t'")).unwrap().1, Token::CharLit(b'\t'));
+            assert_eq!(lex(Span::new("'\\r'")).unwrap().1, Token::CharLit(b'\r'));
+            assert_eq!(lex(Span::new("'\\''")).unwrap().1, Token::CharLit(b'\''));
+            assert_eq!(lex(Span::new("'\\\\'")).unwrap().1, Token::CharLit(b'\\'));
+        }
+    }
+}
+
+fn parse_float_lit(input: Span) -> ParseResult<Token> {
+    type Error<'a> = nom::error::Error<Span<'a>>;
+    let integer_part = recognize(pair(opt(one_of::<_, _, Error>("+-")), digit1));
+    let fractional_part = recognize(pair(char::<_, Error>('.'), digit1));
+    let fractional_part1 = recognize(pair(char::<_, Error>('.'), digit1));
+    let exponent_part = recognize(pair(
+        tag_no_case("e"),
+        pair(opt(one_of::<_, _, Error>("+-")), digit1),
+    ));
+    let exponent_part1 = recognize(pair(
+        tag_no_case("e"),
+        pair(opt(one_of::<_, _, Error>("+-")), digit1),
+    ));
+    let pattern = alt((
+        recognize(tuple((
+            integer_part,
+            opt(fractional_part),
+            opt(exponent_part),
+        ))),
+        recognize(pair(fractional_part1, opt(exponent_part1))),
+    ));
+    let a = pattern.parse(input)?;
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_parse_num() {
+        assert_eq!(lex_int_lit(Span::new("123")).unwrap().1, Token::IntLit(123));
+        assert_eq!(lex_int_lit(Span::new("0")).unwrap().1, Token::IntLit(0));
+        assert_eq!(
+            lex_int_lit(Span::new("-123")).unwrap().1,
+            Token::IntLit(-123)
+        );
     }
 }
