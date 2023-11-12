@@ -1,6 +1,6 @@
 use crate::tokens::Token;
 
-pub mod parser;
+pub mod lex;
 pub mod tokens;
 
 #[macro_use]

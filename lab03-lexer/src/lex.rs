@@ -30,13 +30,13 @@ pub fn lex_token(input: Span) -> LexResult<Token> {
     delimited(
         skip,
         alt((
-            lex_operators,
-            lex_punctuator,
-            lex_ident_or_reserved,
             lex_int_lit,
             lex_float_lit,
             lex_str_lit,
             lex_char_lit,
+            lex_operators,
+            lex_punctuator,
+            lex_ident_or_reserved,
             lex_illegal,
         )),
         skip,
