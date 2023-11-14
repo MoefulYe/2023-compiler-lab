@@ -165,6 +165,17 @@ struct Bitset {
     }
     return bitset;
   }
+
+  std::string to_string() {
+    auto ret = std::string();
+    for (auto i : *this) {
+      ret += std::to_string(i) + ",";
+    }
+    if (!ret.empty()) {
+      ret.pop_back();
+    }
+    return "{" + ret + "}";
+  }
 };
 
 constexpr uint64_t MAX_NFA_STATE = sizeof(uint64_t) * 8;
@@ -183,7 +194,7 @@ struct NFA {
   // 状态集合
   vector<State> states;
   std::string symbols;
-  NFA(int start, int end, int total, std::string &&symbols)
+  NFA(int start, int end, int total, std::string symbols)
       : start(start), end(end), states(total), symbols(symbols) {}
 
   Bitset epsilon_closure(int id) {
@@ -247,7 +258,7 @@ struct NFA {
     auto total = atoi(buf);
     std::cin.getline(buf, 256);
     auto symbols = std::string(buf);
-    auto nfa = new NFA(start, end, total, std::move(symbols));
+    auto nfa = new NFA(start, end, total, symbols);
     for (int i = 0; i < total; i++) {
       std::cin.getline(buf, 256);
       auto tokens = Util::split_line(buf);
@@ -255,7 +266,7 @@ struct NFA {
       for (int j = 0; j < tokens.size(); j++) {
         to[symbols[j]] = Bitset::from_string(tokens[j]);
       }
-      nfa->states.push_back(NFA::State{to});
+      nfa->states[i].to = to;
     }
     return nfa;
   }
@@ -263,14 +274,14 @@ struct NFA {
 
 struct DFA {
   struct State {
-    static constexpr int UNDEFINED = -1;
+    static constexpr int UNALLOCID = -1;
     int id;
     // 对于dfa state对应nfa state的一个子集
     Bitset nfa_states;
     typedef unordered_map<char, State *> Trans;
     Trans to;
-    State() : id(UNDEFINED), nfa_states(), to() {}
-    State(Bitset nfa_states) : id(UNDEFINED), nfa_states(nfa_states), to() {}
+    State() : nfa_states(), to(), id(UNALLOCID) {}
+    State(Bitset nfa_states) : nfa_states(nfa_states), to(), id(UNALLOCID) {}
 
     bool operator==(const State &state) const {
       return nfa_states == state.nfa_states;
@@ -288,6 +299,16 @@ struct DFA {
     bool operator>=(const State &state) const {
       return nfa_states >= state.nfa_states;
     }
+
+    void visit(function<void(State &)> func, set<State *> &has_visited) {
+      func(*this);
+      has_visited.insert(this);
+      for (auto [_, s] : this->to) {
+        if (has_visited.find(s) == has_visited.end()) {
+          s->visit(func, has_visited);
+        }
+      }
+    }
   };
   State *start;
   set<State *> ends;
@@ -297,6 +318,10 @@ struct DFA {
   DFA(State *s0, std::string symbols)
       : start(s0), ends(), states(), symbols(symbols) {
     states.insert(s0);
+    auto pos = this->symbols.find('#');
+    if (pos != std::string::npos) {
+      this->symbols.erase(pos);
+    }
   }
 
   optional<State *> find_state(function<bool(const State &s)> pred) {
@@ -326,24 +351,52 @@ struct DFA {
     while (!to_solve.empty()) {
       auto state = to_solve.top();
       to_solve.pop();
-      for (auto symbol : nfa.symbols) {
+      for (auto symbol : dfa->symbols) {
         auto move_closure =
             nfa.epsilon_closure(nfa.move(state->nfa_states, symbol));
-        if (auto to = dfa->find_state([=](const State &state) -> bool {
-              return state.nfa_states == move_closure;
-            });
-            to.has_value()) {
-          state->to.insert(make_pair(symbol, to.value()));
-        } else {
-          auto new_state = new State(move_closure);
-          state->to.insert(make_pair(symbol, new_state));
-          to_solve.push(new_state);
-          dfa->states.insert(new_state);
+        if (!move_closure.empty()) {
+          if (auto to = dfa->find_state([=](const State &state) -> bool {
+                return state.nfa_states == move_closure;
+              });
+              to.has_value()) {
+            state->to.insert(make_pair(symbol, to.value()));
+          } else {
+            auto new_state = new State(move_closure);
+            state->to.insert(make_pair(symbol, new_state));
+            to_solve.push(new_state);
+            dfa->states.insert(new_state);
+          }
         }
       }
     }
-
     dfa->set_end_states(nfa.end);
+    auto allocator = 0;
+    auto has_visited = set<State *>();
+    dfa->start->visit([&](State &s) { s.id = allocator++; }, has_visited);
     return dfa;
+  }
+
+  std::string to_string() {
+    auto ret = "start: " + std::to_string(this->start->id) + "\n";
+    ret += "end: ";
+    auto ends = std::string();
+    for (auto end : this->ends) {
+      ends += std::to_string(end->id) + ",";
+    }
+    if (!ends.empty()) {
+      ends.pop_back();
+    }
+    ret += ends + "\n";
+    ret += "symbols: " + this->symbols + "\n";
+    auto has_visited = set<State *>();
+    this->start->visit(
+        [&](State &s) {
+          for (auto [ch, to] : s.to) {
+            ret += std::to_string(s.id) + "--" + ch + "-->" +
+                   std::to_string(to->id) + "\n";
+          }
+        },
+        has_visited);
+    return ret;
   }
 };

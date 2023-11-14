@@ -5,4 +5,4 @@ test-debug:
 	@g++ src/test.cpp -l gtest -g -o target/test
 
 build:
-	@g++ src/main.cpp -o target/main
+	@g++ src/main.cpp -o target/main -g

@@ -134,8 +134,8 @@ struct ContextFreeGrammar {
     auto ret = string(START_PREFIX) + this->_start + '\n';
     auto terminals = this->terminals();
     auto nonterminals = this->nonterminals();
-    ret += nonterminals + '\n';
-    ret += terminals + '\n';
+    ret += string(NONTERMINAL_SET_PREFIX) + nonterminals + '\n';
+    ret += string(TERMINAL_SET_PREFIX) + terminals + '\n';
     for (auto left : nonterminals) {
       ret += left;
       ret += ARROW;
@@ -151,9 +151,16 @@ struct ContextFreeGrammar {
     return ret;
   }
 
-  Symbol alloc_nonterminal() { return this->_nonterminals.alloc(); }
+  Symbol alloc_nonterminal() {
+    auto new_non = this->_nonterminals.alloc();
+    this->_productions.insert({new_non, {}});
+    return new_non;
+  }
 
-  void alloc_nonterminal(Symbol nonterm) { this->_nonterminals.alloc(nonterm); }
+  void alloc_nonterminal(Symbol nonterm) {
+    this->_nonterminals.alloc(nonterm);
+    this->_productions.insert({nonterm, {}});
+  }
 
 private:
   TerminalSet _terminals;

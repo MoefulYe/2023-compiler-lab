@@ -7,7 +7,7 @@ void handle_direct(ContextFreeGrammar &cfg,
                    ContextFreeGrammar::Symbol to_handle);
 
 void left_recursion_kill(ContextFreeGrammar &cfg) {
-  auto nonterminals = cfg.terminals();
+  auto nonterminals = cfg.nonterminals();
   auto size = nonterminals.size();
   for (int i = 0; i < size; i++) {
     auto a_i = nonterminals.at(i);

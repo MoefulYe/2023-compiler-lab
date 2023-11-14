@@ -69,7 +69,7 @@ private:
     constexpr auto ARROW = ContextFreeGrammar::ARROW;
     constexpr auto DIVISION = ContextFreeGrammar::DIVISION;
     assert(line.size() > 1 + ARROW.size());
-    assert(line.substr(1, 1 + ARROW.size()) == ARROW);
+    assert(line.substr(1, ARROW.size()) == ARROW);
     auto left = line.front();
     line = line.substr(1 + ARROW.size());
     auto rights = ContextFreeGrammar::ProductionRights{};
