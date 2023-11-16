@@ -7,18 +7,24 @@ struct TrieNode : map<ContextFreeGrammar::Symbol, TrieNode *> {
       : map<ContextFreeGrammar::Symbol, TrieNode *>() {
     for (auto &right : cfg.produce(symbol)) {
       auto cur = this;
-      for (auto symbol : right) {
-        auto res = cur->find(symbol);
-        if (res == cur->end()) {
-          if (cur != this && cur->size() == 0) {
-            cur->insert({ContextFreeGrammar::EPSILON, new TrieNode});
-          }
-          auto new_child = new TrieNode;
-          cur->insert({symbol, new_child});
-          cur = new_child;
+      auto it = right.begin();
+      for (;;) {
+        // 迭代直到遍历完右部或者在树上找不到对应的节点
+        if (it == right.end()) {
+          cur->insert({ContextFreeGrammar::EPSILON, new TrieNode});
+          break;
+        } else if (auto entry = cur->find(*it); entry == cur->end()) {
+          break;
         } else {
-          cur = res->second;
+          cur = entry->second;
+          it++;
         }
+      }
+      while (it != right.end()) {
+        auto new_child = new TrieNode;
+        cur->insert({*it, new_child});
+        cur = new_child;
+        it++;
       }
     }
   }

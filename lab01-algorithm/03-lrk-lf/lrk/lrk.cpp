@@ -6,6 +6,8 @@ void rewrite(ContextFreeGrammar &cfg, ContextFreeGrammar::Symbol a_i,
 void handle_direct(ContextFreeGrammar &cfg,
                    ContextFreeGrammar::Symbol to_handle);
 
+// 不能存在推导出空产生式
+// 不能从自己推导出自己
 void left_recursion_kill(ContextFreeGrammar &cfg) {
   auto nonterminals = cfg.nonterminals();
   auto size = nonterminals.size();
