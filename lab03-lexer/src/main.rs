@@ -1,13 +1,24 @@
-use crate::tokens::Token;
+use std::{
+    env,
+    fs::File,
+    io::{read_to_string, Result},
+};
 
+use lex::lexer;
 pub mod lex;
 pub mod tokens;
 
-#[macro_use]
 extern crate nom;
-#[macro_use]
 extern crate nom_locate;
 
-fn main() {
-    println!("{}", Token::EqualEqual);
+fn main() -> Result<()> {
+    for file in env::args().skip(1) {
+        println!("tokenize file: `{file}`");
+        let code = read_to_string(File::open(file)?)?;
+        for token in lexer(&code).map(|v| v) {
+            println!("{}", token);
+        }
+        println!("------------done------------");
+    }
+    Ok(())
 }

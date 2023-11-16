@@ -11,12 +11,17 @@ use nom_locate::LocatedSpan;
 pub type Span<'a> = LocatedSpan<&'a str>;
 pub type LexResult<'a, T> = IResult<Span<'a>, T>;
 
-// impl Iterator for Parser<'_> {
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//         todo!()
-//     }
-// }
+pub fn lexer(
+    input: &str,
+) -> ParserIterator<
+    LocatedSpan<&str>,
+    nom::error::Error<LocatedSpan<&str>>,
+    fn(
+        LocatedSpan<&str>,
+    ) -> Result<(LocatedSpan<&str>, Token), nom::Err<nom::error::Error<LocatedSpan<&str>>>>,
+> {
+    iterator(Span::new(input), lex_token)
+}
 
 macro_rules! syntax {
     ($func_name: ident, $tag_string: literal, $output_token: expr) => {
@@ -37,7 +42,6 @@ pub fn lex_token(input: Span) -> LexResult<Token> {
             lex_operators,
             lex_punctuator,
             lex_ident_or_reserved,
-            lex_illegal,
         )),
         skip,
     )(input)
@@ -130,10 +134,6 @@ fn lex_punctuator(input: Span) -> LexResult<Token> {
         lex_rbrace,
         lex_dot_dot_dot,
     ))(input)
-}
-
-fn lex_illegal(input: Span) -> LexResult<Token> {
-    map(nom::bytes::complete::take(0usize), |_| Token::Eof)(input)
 }
 
 fn lex_ident_or_reserved(input: Span) -> LexResult<Token> {
