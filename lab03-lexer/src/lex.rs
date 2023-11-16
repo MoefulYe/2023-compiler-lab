@@ -35,10 +35,7 @@ pub fn lex_token(input: Span) -> LexResult<Token> {
     delimited(
         skip,
         alt((
-            lex_int_lit,
-            lex_float_lit,
-            lex_str_lit,
-            lex_char_lit,
+            lex_lit,
             lex_operators,
             lex_punctuator,
             lex_ident_or_reserved,
@@ -148,6 +145,10 @@ use lex_char::lex as lex_char_lit;
 use lex_float::lex as lex_float_lit;
 use lex_int::lex as lex_int_lit;
 use lex_str::lex as lex_str_lit;
+
+fn lex_lit(input: Span) -> LexResult<Token> {
+    alt((lex_str_lit, lex_char_lit, lex_float_lit, lex_int_lit))(input)
+}
 
 mod lex_str {
     use nom::{
@@ -290,19 +291,21 @@ mod lex_char {
 
 mod lex_float {
     use super::*;
-    fn has_interger_part(input: Span) -> LexResult<Span> {
+    fn interger_fractional(input: Span) -> LexResult<Span> {
         type Error<'a> = nom::error::Error<Span<'a>>;
         let integer_part = pair(opt(one_of::<_, _, Error>("+-")), digit1);
         let fractional_part = pair(char::<_, Error>('.'), digit1);
+        recognize(tuple((integer_part, fractional_part)))(input)
+    }
+
+    fn interger_exponent(input: Span) -> LexResult<Span> {
+        type Error<'a> = nom::error::Error<Span<'a>>;
+        let integer_part = pair(opt(one_of::<_, _, Error>("+-")), digit1);
         let exponent_part = pair(
             tag_no_case("e"),
             pair(opt(one_of::<_, _, Error>("+-")), digit1),
         );
-        recognize(tuple((
-            integer_part,
-            opt(fractional_part),
-            opt(exponent_part),
-        )))(input)
+        recognize(tuple((integer_part, exponent_part)))(input)
     }
 
     fn no_interger_part(input: Span) -> LexResult<Span> {
@@ -317,9 +320,10 @@ mod lex_float {
 
     pub fn lex(input: Span) -> LexResult<Token> {
         map(
-            map_res(alt((has_interger_part, no_interger_part)), |s: Span| {
-                s.fragment().parse::<f32>()
-            }),
+            map_res(
+                alt((interger_exponent, interger_fractional, no_interger_part)),
+                |s: Span| s.fragment().parse::<f32>(),
+            ),
             Token::FloatLit,
         )(input)
     }
@@ -367,7 +371,6 @@ mod lex_int {
     }
 
     fn oct(input: Span) -> LexResult<i32> {
-        type Error<'a> = nom::error::Error<Span<'a>>;
         map_res(preceded(tag_no_case("0o"), oct_digit1), |s: Span| {
             i32::from_str_radix(s.fragment(), 8)
         })(input)
