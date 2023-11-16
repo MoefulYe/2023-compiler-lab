@@ -45,25 +45,27 @@ pub fn lex_token(input: Span) -> LexResult<Token> {
 }
 
 fn skip(input: Span) -> LexResult<()> {
-    let multi_line_comment = recognize(tuple((
+    let multi_line_comment = tuple((
         multispace0,
         tag("/*"),
         take_until("*/"),
         tag("*/"),
         multispace0,
-    )));
-    let one_line_comment = recognize(tuple((
+    ));
+    let one_line_comment = tuple((
         multispace0,
         tag("//"),
         take_until("\n"),
         tag("\n"),
         multispace0,
-    )));
+    ));
+    let commets = recognize(many0_count(tuple((
+        multispace0,
+        alt((one_line_comment, multi_line_comment)),
+        multispace0,
+    ))));
 
-    return map(
-        alt((one_line_comment, multi_line_comment, multispace0)),
-        |_| (),
-    )(input);
+    return map(tuple((multispace0, opt(commets), multispace0)), |_| ())(input);
 }
 
 syntax!(lex_equal, "=", Token::Equal);

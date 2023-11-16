@@ -15,9 +15,10 @@ fn main() -> Result<()> {
     for file in env::args().skip(1) {
         println!("tokenize file: `{file}`");
         let code = read_to_string(File::open(file)?)?;
-        for token in lexer(&code).map(|v| v) {
-            println!("{}", token);
-        }
+        let mut it = lexer(&code);
+        it.for_each(|token| println!("{}", token));
+        let res = it.finish();
+        assert!(res.is_ok());
         println!("------------done------------");
     }
     Ok(())
