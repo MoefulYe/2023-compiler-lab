@@ -14,6 +14,9 @@ struct TrieNode : map<ContextFreeGrammar::Symbol, TrieNode *> {
           cur->insert({ContextFreeGrammar::EPSILON, new TrieNode});
           break;
         } else if (auto entry = cur->find(*it); entry == cur->end()) {
+          if (cur->size() == 0 && cur != this) {
+            cur->insert({ContextFreeGrammar::EPSILON, new TrieNode});
+          }
           break;
         } else {
           cur = entry->second;
