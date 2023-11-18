@@ -1,6 +1,0 @@
-CompileUnit ::= [CompileUnit] (ConstValDecl | VarDecl | FuncDecl | ExternFuncDecl | FuncDef)
-// 和c语言语义不同的是,常量是编译时确定的, 直接内联到引用处所以在运行时是不存在的
-// 常量定义式右边必须是字面量
-ConstValDecl ::= "const" Type Ident "=" Literal ";"
-VarDecl ::= Type Ident ["=" Expr] ";"
-PrimType ::= "int" | "float" | "bool" | "void"
