@@ -10,6 +10,7 @@
 #include <vector>
 
 using std::bitset;
+using std::map;
 using std::optional;
 using std::string;
 using std::string_view;

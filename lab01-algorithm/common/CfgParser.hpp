@@ -36,7 +36,9 @@ private:
       if (pos == string_view::npos) {
         pos = input.size();
       }
-      ret.push_back(input.substr(0, pos));
+      if (auto to_push = input.substr(0, pos); to_push.substr(0, 2) != "//") {
+        ret.push_back(to_push);
+      }
       input = input.substr(pos < input.size() ? pos + 1 : pos);
     }
     return ret;
