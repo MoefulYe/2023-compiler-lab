@@ -2,24 +2,25 @@ use std::{
     env,
     fs::File,
     io::{read_to_string, Result},
+    path::PathBuf,
 };
 
-use lex::lexer;
+use lex::lex;
 pub mod lex;
+pub mod span;
 pub mod tokens;
+pub mod error;
 
 extern crate nom;
 extern crate nom_locate;
 
 fn main() -> Result<()> {
-    for file in env::args().skip(1) {
-        println!("tokenize file: `{file}`");
-        let code = read_to_string(File::open(file)?)?;
-        let mut it = lexer(&code);
-        it.for_each(|token| println!("{}", token));
-        let res = it.finish();
-        assert!(res.is_ok());
-        println!("------------done------------");
+    for path in env::args().skip(1).map(|s| PathBuf::from(s)) {
+        let file_name = path.file_name().unwrap().to_str().unwrap();
+        println!("tokenize file: `{file_name}`");
+        let code = read_to_string(File::open(&path)?)?;
+        lex(file_name, &code);
+        println!("-----------------done-----------------");
     }
     Ok(())
 }

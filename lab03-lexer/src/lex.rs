@@ -1,26 +1,24 @@
+use crate::error::LexResult;
+use crate::span::{Meta, Span};
 use crate::tokens::{ident_or_reserved, Token};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, tag_no_case, take_until};
-use nom::character::complete::{alpha1, alphanumeric1, char, digit1, i32, multispace0, one_of};
-use nom::combinator::{iterator, map, map_res, opt, recognize, ParserIterator};
+use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, one_of};
+use nom::combinator::{cut, iterator, map, opt, recognize};
 use nom::multi::many0_count;
 use nom::sequence::{delimited, pair, tuple};
-use nom::IResult;
-use nom_locate::LocatedSpan;
+use nom::Err;
 
-pub type Span<'a> = LocatedSpan<&'a str>;
-pub type LexResult<'a, T> = IResult<Span<'a>, T>;
-
-pub fn lexer(
-    input: &str,
-) -> ParserIterator<
-    LocatedSpan<&str>,
-    nom::error::Error<LocatedSpan<&str>>,
-    fn(
-        LocatedSpan<&str>,
-    ) -> Result<(LocatedSpan<&str>, Token), nom::Err<nom::error::Error<LocatedSpan<&str>>>>,
-> {
-    iterator(Span::new(input), lex_token)
+pub fn lex(filename: &str, input: &str) {
+    let input = Span::new_extra(input, Meta::new(filename));
+    let mut it = iterator(input, lex_token);
+    it.for_each(|token| println!("{token}"));
+    match it.finish().err() {
+        Some(Err::Failure(err)) => println!("{}", err),
+        Some(Err::Error(err)) => println!("{}", err),
+        Some(Err::Incomplete(_)) => {}
+        None => {}
+    }
 }
 
 macro_rules! syntax {
@@ -34,12 +32,12 @@ macro_rules! syntax {
 pub fn lex_token(input: Span) -> LexResult<Token> {
     delimited(
         skip,
-        alt((
+        cut(alt((
             lex_lit,
             lex_operators,
             lex_punctuator,
             lex_ident_or_reserved,
-        )),
+        ))),
         skip,
     )(input)
 }
@@ -211,6 +209,7 @@ mod lex_str {
 
     #[cfg(test)]
     mod test {
+        use crate::span::Meta;
         use crate::tokens::Token;
 
         use super::lex;
@@ -218,15 +217,21 @@ mod lex_str {
         #[test]
         fn test_str() {
             assert_eq!(
-                lex(Span::new(r###""hello world""###)).unwrap().1,
+                lex(Span::new_extra(r###""hello world""###, Meta::new("")))
+                    .unwrap()
+                    .1,
                 Token::StrLit("hello world".to_owned())
             );
             assert_eq!(
-                lex(Span::new(r###""hello\nworld""###)).unwrap().1,
+                lex(Span::new_extra(r###""hello\nworld""###, Meta::new("")))
+                    .unwrap()
+                    .1,
                 Token::StrLit("hello\nworld".to_owned())
             );
             assert_eq!(
-                lex(Span::new(r###""hello\tworld""###)).unwrap().1,
+                lex(Span::new_extra(r###""hello\tworld""###, Meta::new("")))
+                    .unwrap()
+                    .1,
                 Token::StrLit("hello\tworld".to_owned())
             );
         }
@@ -275,111 +280,177 @@ mod lex_char {
 
     #[cfg(test)]
     mod test {
+        use crate::span::Meta;
         use crate::tokens::Token;
 
         use super::lex;
         use super::Span;
         #[test]
         fn test_lex() {
-            assert_eq!(lex(Span::new("'a'")).unwrap().1, Token::CharLit(b'a'));
-            assert_eq!(lex(Span::new("'\\n'")).unwrap().1, Token::CharLit(b'\n'));
-            assert_eq!(lex(Span::new("'\\t'")).unwrap().1, Token::CharLit(b'\t'));
-            assert_eq!(lex(Span::new("'\\r'")).unwrap().1, Token::CharLit(b'\r'));
-            assert_eq!(lex(Span::new("'\\''")).unwrap().1, Token::CharLit(b'\''));
-            assert_eq!(lex(Span::new("'\\\\'")).unwrap().1, Token::CharLit(b'\\'));
+            assert_eq!(
+                lex(Span::new_extra("'a'", Meta::new(""))).unwrap().1,
+                Token::CharLit(b'a')
+            );
+            assert_eq!(
+                lex(Span::new_extra("'\\n'", Meta::new(""))).unwrap().1,
+                Token::CharLit(b'\n')
+            );
+            assert_eq!(
+                lex(Span::new_extra("'\\t'", Meta::new(""))).unwrap().1,
+                Token::CharLit(b'\t')
+            );
+            assert_eq!(
+                lex(Span::new_extra("'\\r'", Meta::new(""))).unwrap().1,
+                Token::CharLit(b'\r')
+            );
+            assert_eq!(
+                lex(Span::new_extra("'\\''", Meta::new(""))).unwrap().1,
+                Token::CharLit(b'\'')
+            );
+            assert_eq!(
+                lex(Span::new_extra("'\\\\'", Meta::new(""))).unwrap().1,
+                Token::CharLit(b'\\')
+            );
         }
     }
 }
 
 mod lex_float {
+    use nom::Err;
+
+    use crate::error::{LexError, SourcedLexError};
+
     use super::*;
     fn interger_fractional(input: Span) -> LexResult<Span> {
-        type Error<'a> = nom::error::Error<Span<'a>>;
-        let integer_part = pair(opt(one_of::<_, _, Error>("+-")), digit1);
-        let fractional_part = pair(char::<_, Error>('.'), digit1);
+        let integer_part = pair(opt(one_of::<_, _, SourcedLexError>("+-")), digit1);
+        let fractional_part = pair(char::<_, SourcedLexError>('.'), digit1);
         recognize(tuple((integer_part, fractional_part)))(input)
     }
 
     fn interger_exponent(input: Span) -> LexResult<Span> {
-        type Error<'a> = nom::error::Error<Span<'a>>;
-        let integer_part = pair(opt(one_of::<_, _, Error>("+-")), digit1);
+        let integer_part = pair(opt(one_of::<_, _, SourcedLexError>("+-")), digit1);
         let exponent_part = pair(
             tag_no_case("e"),
-            pair(opt(one_of::<_, _, Error>("+-")), digit1),
+            pair(opt(one_of::<_, _, SourcedLexError>("+-")), digit1),
         );
         recognize(tuple((integer_part, exponent_part)))(input)
     }
 
     fn no_interger_part(input: Span) -> LexResult<Span> {
-        type Error<'a> = nom::error::Error<Span<'a>>;
-        let fractional_part = pair(char::<_, Error>('.'), digit1);
+        let fractional_part = pair(char::<_, SourcedLexError>('.'), digit1);
         let exponent_part = pair(
             tag_no_case("e"),
-            pair(opt(one_of::<_, _, Error>("+-")), digit1),
+            pair(opt(one_of::<_, _, SourcedLexError>("+-")), digit1),
         );
         recognize(tuple((fractional_part, opt(exponent_part))))(input)
     }
 
     pub fn lex(input: Span) -> LexResult<Token> {
-        map(
-            map_res(
-                alt((interger_exponent, interger_fractional, no_interger_part)),
-                |s: Span| s.fragment().parse::<f32>(),
-            ),
-            Token::FloatLit,
-        )(input)
+        let (leftover, parsed) =
+            alt((interger_exponent, interger_fractional, no_interger_part))(input.clone())?;
+        let parsed = parsed.fragment();
+        let ret = parsed.parse::<f32>().map_err(|err| {
+            Err::Failure(SourcedLexError {
+                error: LexError::ParseFloatError(err, *parsed),
+                span: input,
+            })
+        })?;
+        Ok((leftover, Token::FloatLit(ret)))
     }
 
     #[cfg(test)]
     mod test {
+        use crate::span::Meta;
+
         use super::lex;
         use super::Span;
         use super::Token;
         #[test]
         fn test_float() {
-            assert_eq!(lex(Span::new("1.0")).unwrap().1, Token::FloatLit(1.0));
-            assert_eq!(lex(Span::new("1.0e1")).unwrap().1, Token::FloatLit(10.0));
-            assert_eq!(lex(Span::new("1.0e-1")).unwrap().1, Token::FloatLit(0.1));
-            assert_eq!(lex(Span::new("1.0e+1")).unwrap().1, Token::FloatLit(10.0));
-            assert_eq!(lex(Span::new("1.0E1")).unwrap().1, Token::FloatLit(10.0));
-            assert_eq!(lex(Span::new("1.0E-1")).unwrap().1, Token::FloatLit(0.1));
-            assert_eq!(lex(Span::new(".1E+1")).unwrap().1, Token::FloatLit(1.0));
+            assert_eq!(
+                lex(Span::new_extra("1.0", Meta::new(""))).unwrap().1,
+                Token::FloatLit(1.0)
+            );
+            assert_eq!(
+                lex(Span::new_extra("1.0e1", Meta::new(""))).unwrap().1,
+                Token::FloatLit(10.0)
+            );
+            assert_eq!(
+                lex(Span::new_extra("1.0e-1", Meta::new(""))).unwrap().1,
+                Token::FloatLit(0.1)
+            );
+            assert_eq!(
+                lex(Span::new_extra("1.0e+1", Meta::new(""))).unwrap().1,
+                Token::FloatLit(10.0)
+            );
+            assert_eq!(
+                lex(Span::new_extra("1.0E1", Meta::new(""))).unwrap().1,
+                Token::FloatLit(10.0)
+            );
+            assert_eq!(
+                lex(Span::new_extra("1.0E-1", Meta::new(""))).unwrap().1,
+                Token::FloatLit(0.1)
+            );
+            assert_eq!(
+                lex(Span::new_extra(".1E+1", Meta::new(""))).unwrap().1,
+                Token::FloatLit(1.0)
+            );
         }
     }
 }
 
 mod lex_int {
+    use crate::error::{LexError, SourcedLexError};
+
     use super::*;
-    use nom::{
-        character::complete::{hex_digit1, oct_digit1},
-        sequence::preceded,
-    };
+    use nom::{sequence::preceded, Err};
 
     fn hex(input: Span) -> LexResult<i32> {
-        map_res(preceded(tag_no_case("0x"), hex_digit1), |s: Span| {
-            i32::from_str_radix(s.fragment(), 16)
-        })(input)
+        let (leftover, parsed) = preceded(tag_no_case("0x"), alphanumeric1)(input.clone())?;
+        let parsed = parsed.fragment();
+        let ret = i32::from_str_radix(parsed, 16).map_err(|err| {
+            Err::Failure(SourcedLexError {
+                error: LexError::ParseIntError(err, *parsed),
+                span: input,
+            })
+        })?;
+        Ok((leftover, ret))
     }
 
     fn bin(input: Span) -> LexResult<i32> {
-        type Error<'a> = nom::error::Error<Span<'a>>;
-        map_res(
-            preceded(
-                tag_no_case("0b"),
-                recognize(many0_count(one_of::<_, _, Error>("01"))),
-            ),
-            |s: Span| i32::from_str_radix(s.fragment(), 2),
-        )(input)
+        let (leftover, parsed) = preceded(tag_no_case("0b"), alphanumeric1)(input.clone())?;
+        let parsed = parsed.fragment();
+        let ret = i32::from_str_radix(parsed, 2).map_err(|err| {
+            Err::Failure(SourcedLexError {
+                error: LexError::ParseIntError(err, *parsed),
+                span: input,
+            })
+        })?;
+        Ok((leftover, ret))
     }
 
     fn oct(input: Span) -> LexResult<i32> {
-        map_res(preceded(tag_no_case("0o"), oct_digit1), |s: Span| {
-            i32::from_str_radix(s.fragment(), 8)
-        })(input)
+        let (leftover, parsed) = preceded(tag_no_case("0o"), alphanumeric1)(input.clone())?;
+        let parsed = parsed.fragment();
+        let ret = i32::from_str_radix(parsed, 8).map_err(|err| {
+            Err::Failure(SourcedLexError {
+                error: LexError::ParseIntError(err, *parsed),
+                span: input,
+            })
+        })?;
+        Ok((leftover, ret))
     }
 
     fn dec(input: Span) -> LexResult<i32> {
-        i32(input)
+        let (leftover, parsed) = recognize(pair(digit1, alphanumeric1))(input.clone())?;
+        let parsed = parsed.fragment();
+        let ret = i32::from_str_radix(parsed, 10).map_err(|err| {
+            Err::Failure(SourcedLexError {
+                error: LexError::ParseIntError(err, *parsed),
+                span: input,
+            })
+        })?;
+        Ok((leftover, ret))
     }
 
     pub fn lex(input: Span) -> LexResult<Token> {
@@ -388,16 +459,30 @@ mod lex_int {
 
     #[cfg(test)]
     mod test {
+        use crate::span::Meta;
+
         use super::super::Span;
         use super::lex;
         use super::Token;
 
         #[test]
         fn test_interger() {
-            assert_eq!(lex(Span::new("0x1")).unwrap().1, Token::IntLit(1));
-            assert_eq!(lex(Span::new("0b1")).unwrap().1, Token::IntLit(1));
-            assert_eq!(lex(Span::new("0o1")).unwrap().1, Token::IntLit(1));
-            assert_eq!(lex(Span::new("1")).unwrap().1, Token::IntLit(1));
+            assert_eq!(
+                lex(Span::new_extra("0x1", Meta::new(""))).unwrap().1,
+                Token::IntLit(1)
+            );
+            assert_eq!(
+                lex(Span::new_extra("0b1", Meta::new(""))).unwrap().1,
+                Token::IntLit(1)
+            );
+            assert_eq!(
+                lex(Span::new_extra("0o1", Meta::new(""))).unwrap().1,
+                Token::IntLit(1)
+            );
+            assert_eq!(
+                lex(Span::new_extra("1", Meta::new(""))).unwrap().1,
+                Token::IntLit(1)
+            );
         }
     }
 }
