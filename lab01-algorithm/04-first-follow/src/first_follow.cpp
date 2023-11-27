@@ -53,12 +53,8 @@ SymbolSet first(ContextFreeGrammar &cfg, Map &memento,
 
 Map solve_firsts(ContextFreeGrammar &cfg) {
   auto ret = Map();
-  auto terminals = cfg.terminals();
   auto nonterminals = cfg.nonterminals();
   // 求出所有符号的 first 集
-  for (auto symbol : terminals) {
-    ret.insert({symbol, {symbol}});
-  }
   for (auto symbol : nonterminals) {
     first(cfg, ret, symbol);
   }
@@ -82,13 +78,21 @@ Map solve_follows(ContextFreeGrammar &cfg, Map &firsts) {
             auto &follow_i = follows.at(cur);
             auto j = i + 1;
             for (; j < right.size(); j++) {
-              auto first_j = firsts.at(right.at(j));
-              if (first_j.contains_and_remove_epsilon()) {
-                auto new_follow = follow_i | first_j;
-                flag = new_follow != follow_i;
-                follow_i = new_follow;
+              auto symbol = right.at(j);
+              if (ContextFreeGrammar::is_nonterminal(symbol)) {
+                auto first_j = firsts.at(symbol);
+                if (first_j.contains_and_remove_epsilon()) {
+                  auto new_follow = follow_i | first_j;
+                  flag = new_follow != follow_i;
+                  follow_i = new_follow;
+                } else {
+                  auto new_follow = follow_i | first_j;
+                  flag = new_follow != follow_i;
+                  follow_i = new_follow;
+                  break;
+                }
               } else {
-                auto new_follow = follow_i | first_j;
+                auto new_follow = follow_i | SymbolSet{symbol};
                 flag = new_follow != follow_i;
                 follow_i = new_follow;
                 break;

@@ -1,3 +1,4 @@
+#include "../../common/comm.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -13,6 +14,8 @@
 #include <set>
 #include <stack>
 #include <string>
+#include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -27,22 +30,6 @@ using std::stoi;
 using std::string_view;
 using std::unordered_map;
 using std::vector;
-
-struct Util {
-  // 用空格符分割不以'\n'结尾的字符串
-  static vector<string_view> split_line(string_view line) {
-    auto ret = vector<string_view>();
-    while (!line.empty()) {
-      auto pos = line.find(' ');
-      if (pos == string_view::npos) {
-        pos = line.size();
-      }
-      ret.push_back(line.substr(0, pos));
-      line = line.substr(pos < line.size() ? pos + 1 : pos);
-    }
-    return ret;
-  }
-};
 
 struct Bitset {
   uint64_t content;
@@ -194,8 +181,7 @@ struct NFA {
   // 状态集合
   vector<State> states;
   std::string symbols;
-  NFA(int start, int end, int total, std::string symbols)
-      : start(start), end(end), states(total), symbols(symbols) {}
+  NFA(int start, int end, int total) : start(start), end(end), states(total) {}
 
   Bitset epsilon_closure(int id) {
     auto closure = Bitset{id};
@@ -248,26 +234,48 @@ struct NFA {
   //<trans> ...
   //...
 
-  static NFA *from_stdin() {
-    char buf[256];
-    std::cin.getline(buf, 256);
-    auto start = atoi(buf);
-    std::cin.getline(buf, 256);
-    auto end = atoi(buf);
-    std::cin.getline(buf, 256);
-    auto total = atoi(buf);
-    std::cin.getline(buf, 256);
-    auto symbols = std::string(buf);
-    auto nfa = new NFA(start, end, total, symbols);
-    for (int i = 0; i < total; i++) {
-      std::cin.getline(buf, 256);
-      auto tokens = Util::split_line(buf);
-      auto to = NFA::State::Trans();
-      for (int j = 0; j < tokens.size(); j++) {
-        to[symbols[j]] = Bitset::from_string(tokens[j]);
+  static NFA *from_str(string_view str) {
+    auto lines = Util::lines(str);
+    assert(lines.size() > 3);
+    auto start_line = lines[0];
+    auto end_line = lines[1];
+    auto count_line = lines[2];
+    constexpr string_view START_PREFIX = "start: ";
+    constexpr string_view END_PREFIX = "end: ";
+    constexpr string_view COUNT_PREFIX = "count: ";
+    assert(start_line.substr(0, START_PREFIX.length()) == START_PREFIX);
+    assert(end_line.substr(0, END_PREFIX.length()) == END_PREFIX);
+    assert(count_line.substr(0, COUNT_PREFIX.length()) == COUNT_PREFIX);
+    start_line = start_line.substr(START_PREFIX.length());
+    end_line = end_line.substr(END_PREFIX.length());
+    count_line = count_line.substr(COUNT_PREFIX.length());
+
+    auto start = Util::string_view2int(start_line);
+    auto end = Util::string_view2int(end_line);
+    auto count = Util::string_view2int(count_line);
+    auto nfa = new NFA(start, end, count);
+    auto symbols = std::string();
+
+    using Tran = std::tuple<int, char, int>;
+
+    auto extract = [](string_view line) -> Tran {
+      auto tokens = Util::split(line, ' ');
+      assert(tokens.size() == 3);
+      assert(tokens[2].length() == 1);
+      auto from = Util::string_view2int(tokens[0]);
+      auto to = Util::string_view2int(tokens[1]);
+      auto symbol = tokens[2].front();
+      return {from, symbol, to};
+    };
+
+    for (int i = 3; i < lines.size(); i++) {
+      auto [from, symbol, to] = extract(lines[i]);
+      nfa->states.at(from).to[symbol].insert(to);
+      if (symbol != EPSILON && symbols.find(symbol) == std::string::npos) {
+        symbols += symbol;
       }
-      nfa->states[i].to = to;
     }
+    nfa->symbols = symbols;
     return nfa;
   }
 };
@@ -387,7 +395,7 @@ struct DFA {
       ends.pop_back();
     }
     ret += ends + "\n";
-    ret += "symbols: " + this->symbols + "\n";
+    ret += "count: " + std::to_string(this->states.size()) + "\n";
     auto has_visited = set<State *>();
     this->start->visit(
         [&](State &s) {

@@ -39,35 +39,12 @@ struct ContextFreeGrammar {
   static constexpr string_view TERMINAL_SET_PREFIX = "terminals: ";
 
   static bool is_terminal(Symbol symbol) {
-    return symbol >= 'a' && symbol <= 'z';
+    return !is_nonterminal(symbol) && !is_epsilon(symbol);
   };
   static bool is_nonterminal(Symbol symbol) {
     return symbol >= 'A' && symbol <= 'Z';
   }
   static bool is_epsilon(Symbol symbol) { return symbol == EPSILON; }
-
-  struct TerminalSet : bitset<MAX_TERMINAL_NUM> {
-    TerminalSet() {}
-    TerminalSet(string_view terminals) {
-      bitset<MAX_TERMINAL_NUM>::reset();
-      for (auto symbol : terminals) {
-        assert(is_terminal(symbol));
-        this->set(symbol);
-      }
-    }
-    bool get(Symbol symbol) { return (*this)[symbol - 'a']; }
-    void set(Symbol symbol) { bitset<MAX_TERMINAL_NUM>::set(symbol - 'a'); }
-    void reset(Symbol symbol) { bitset<MAX_TERMINAL_NUM>::reset(symbol - 'a'); }
-    string to_string() {
-      auto ret = string();
-      for (Symbol s = 'a'; s <= 'z'; s++) {
-        if (this->get(s)) {
-          ret += s;
-        }
-      }
-      return ret;
-    }
-  };
 
   struct NonterminalSet : bitset<MAX_NONTERMINAL_NUM> {
     NonterminalSet() {}
@@ -110,9 +87,8 @@ struct ContextFreeGrammar {
     }
   };
 
-  ContextFreeGrammar(Symbol start, string_view nonterminals,
-                     string_view terminals)
-      : _terminals(terminals), _nonterminals(nonterminals) {
+  ContextFreeGrammar(Symbol start, string_view nonterminals)
+      : _nonterminals(nonterminals) {
     this->_start = start;
     for (auto non_term : nonterminals) {
       this->_productions.insert({non_term, {}});
@@ -124,8 +100,6 @@ struct ContextFreeGrammar {
     return _productions.at(nonterminal);
   }
 
-  string terminals() { return this->_terminals.to_string(); }
-
   // 第一项一定是起始符号
   string nonterminals() { return this->_nonterminals.to_string(this->_start); }
 
@@ -133,10 +107,8 @@ struct ContextFreeGrammar {
 
   string to_string() {
     auto ret = string(START_PREFIX) + this->_start + '\n';
-    auto terminals = this->terminals();
     auto nonterminals = this->nonterminals();
     ret += string(NONTERMINAL_SET_PREFIX) + nonterminals + '\n';
-    ret += string(TERMINAL_SET_PREFIX) + terminals + '\n';
     for (auto left : nonterminals) {
       ret += left;
       ret += ARROW;
@@ -164,7 +136,6 @@ struct ContextFreeGrammar {
   }
 
 private:
-  TerminalSet _terminals;
   NonterminalSet _nonterminals;
   Symbol _start;
   Productions _productions;

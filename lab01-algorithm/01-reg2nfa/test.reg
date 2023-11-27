@@ -1,0 +1,7 @@
+#or
+a|b
+#conn
+aba
+#closure
+(a|b)*
+bb(a|b)*a

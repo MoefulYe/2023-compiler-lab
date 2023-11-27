@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <set>
@@ -95,16 +96,19 @@ public:
   };
   Node *start;
   Node *end;
-  NFA(Node *start, Node *end) : start(start), end(end) {}
+  int cnt;
+  NFA(Node *start, Node *end) : start(start), end(end), cnt(0) {}
   NFA *alloc_state() {
     auto allocator = 0;
     this->start->alloc_state(allocator);
+    cnt = allocator;
     return this;
   }
   void print() {
     auto visited = unordered_set<Node *>();
     std::cout << "start: " << this->start->id << std::endl;
     std::cout << "end: " << this->end->id << std::endl;
+    std::cout << "count: " << this->cnt << std::endl;
     this->start->print(visited);
   }
 };
