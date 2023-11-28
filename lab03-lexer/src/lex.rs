@@ -1,10 +1,10 @@
-use crate::error::LexResult;
+use crate::error::{LexError, LexResult, SourcedLexError};
 use crate::span::{Meta, Span};
 use crate::tokens::{ident_or_reserved, Token};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, tag_no_case, take_until};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, one_of};
-use nom::combinator::{cut, iterator, map, opt, recognize};
+use nom::combinator::{iterator, map, opt, recognize};
 use nom::multi::many0_count;
 use nom::sequence::{delimited, pair, tuple};
 use nom::Err;
@@ -14,10 +14,41 @@ pub fn lex(filename: &str, input: &str) {
     let mut it = iterator(input, lex_token);
     it.for_each(|token| println!("{token}"));
     match it.finish().err() {
-        Some(Err::Failure(err)) => println!("{}", err),
-        Some(Err::Error(err)) => println!("{}", err),
-        Some(Err::Incomplete(_)) => {}
+        Some(Err::Failure(err)) => {
+            if !err.is_eof() {
+                println!("{}", err)
+            }
+        }
+        Some(Err::Error(_)) => {
+            unreachable!()
+        }
+        Some(Err::Incomplete(_)) => {
+            unreachable!()
+        }
         None => {}
+    }
+}
+
+fn raise_failure<'a>(err: LexError<'a>) -> impl FnMut(Span<'a>) -> LexResult<'a, Token> {
+    move |input: Span| {
+        LexResult::Err(nom::Err::Failure(SourcedLexError {
+            error: err.clone(),
+            span: input,
+        }))
+    }
+}
+
+fn eof(input: Span) -> LexResult {
+    if input.is_empty() {
+        LexResult::Err(nom::Err::Failure(SourcedLexError {
+            error: LexError::Eof,
+            span: input,
+        }))
+    } else {
+        LexResult::Err(nom::Err::Error(SourcedLexError {
+            error: LexError::Unknown,
+            span: input,
+        }))
     }
 }
 
@@ -32,12 +63,14 @@ macro_rules! syntax {
 pub fn lex_token(input: Span) -> LexResult<Token> {
     delimited(
         skip,
-        cut(alt((
+        alt((
             lex_lit,
             lex_operators,
             lex_punctuator,
             lex_ident_or_reserved,
-        ))),
+            eof,
+            raise_failure(LexError::Unknown),
+        )),
         skip,
     )(input)
 }
@@ -58,12 +91,11 @@ fn skip(input: Span) -> LexResult<()> {
         multispace0,
     ));
     let commets = recognize(many0_count(tuple((
-        multispace0,
         alt((one_line_comment, multi_line_comment)),
         multispace0,
     ))));
 
-    return map(tuple((multispace0, opt(commets), multispace0)), |_| ())(input);
+    return map(tuple((multispace0, opt(commets))), |_| ())(input);
 }
 
 syntax!(lex_equal, "=", Token::Equal);
@@ -153,13 +185,15 @@ fn lex_lit(input: Span) -> LexResult<Token> {
 mod lex_str {
     use nom::{
         branch::alt,
-        bytes::complete::is_not,
+        bytes::complete::{is_not, take},
         character::complete::char,
-        combinator::{map, value, verify},
+        combinator::{cut, map, map_res, value, verify},
         multi::fold_many0,
         sequence::{delimited, preceded},
         Parser,
     };
+
+    use crate::error::LexError;
 
     use super::{LexResult, Span, Token};
 
@@ -172,13 +206,18 @@ mod lex_str {
     fn lex_escaped(input: Span) -> LexResult<char> {
         preceded(
             char('\\'),
-            alt((
+            cut(alt((
                 value('\t', char('t')),
                 value('\r', char('r')),
                 value('\n', char('n')),
                 value('"', char('"')),
                 value('\\', char('\\')),
-            )),
+                map_res(take(1usize), |input: Span| {
+                    Err(LexError::EscapeCharError(
+                        input.fragment().chars().next().unwrap(),
+                    ))
+                }),
+            ))),
         )(input)
     }
 
@@ -240,13 +279,17 @@ mod lex_str {
 
 mod lex_char {
     use nom::branch::alt;
+    use nom::bytes::complete::take;
     use nom::character::complete::char;
+    use nom::combinator::cut;
     use nom::combinator::map;
+    use nom::combinator::map_res;
     use nom::combinator::value;
     use nom::sequence::delimited;
     use nom::sequence::preceded;
     use nom::Parser;
 
+    use crate::error::LexError;
     use crate::tokens::Token;
 
     use super::LexResult;
@@ -254,13 +297,16 @@ mod lex_char {
     fn lex_escaped(input: Span) -> LexResult<u8> {
         preceded(
             char('\\'),
-            alt((
+            cut(alt((
                 value(b'\t', char('t')),
                 value(b'\r', char('r')),
                 value(b'\n', char('n')),
                 value(b'\'', char('\'')),
                 value(b'\\', char('\\')),
-            )),
+                map_res(take(1usize), |input: Span| {
+                    Err(LexError::EscapeCharError(input.chars().next().unwrap()))
+                }),
+            ))),
         )(input)
     }
 
@@ -321,6 +367,16 @@ mod lex_float {
     use crate::error::{LexError, SourcedLexError};
 
     use super::*;
+    fn interger_fractional_expponent(input: Span) -> LexResult<Span> {
+        let integer_part = pair(opt(one_of::<_, _, SourcedLexError>("+-")), digit1);
+        let fractional_part = pair(char::<_, SourcedLexError>('.'), digit1);
+        let exponent_part = pair(
+            tag_no_case("e"),
+            pair(opt(one_of::<_, _, SourcedLexError>("+-")), digit1),
+        );
+        recognize(tuple((integer_part, fractional_part, exponent_part)))(input)
+    }
+
     fn interger_fractional(input: Span) -> LexResult<Span> {
         let integer_part = pair(opt(one_of::<_, _, SourcedLexError>("+-")), digit1);
         let fractional_part = pair(char::<_, SourcedLexError>('.'), digit1);
@@ -346,8 +402,12 @@ mod lex_float {
     }
 
     pub fn lex(input: Span) -> LexResult<Token> {
-        let (leftover, parsed) =
-            alt((interger_exponent, interger_fractional, no_interger_part))(input.clone())?;
+        let (leftover, parsed) = alt((
+            interger_fractional_expponent,
+            interger_exponent,
+            interger_fractional,
+            no_interger_part,
+        ))(input.clone())?;
         let parsed = parsed.fragment();
         let ret = parsed.parse::<f32>().map_err(|err| {
             Err::Failure(SourcedLexError {
@@ -373,27 +433,27 @@ mod lex_float {
             );
             assert_eq!(
                 lex(Span::new_extra("1.0e1", Meta::new(""))).unwrap().1,
-                Token::FloatLit(10.0)
+                Token::FloatLit(1.0e1)
             );
             assert_eq!(
                 lex(Span::new_extra("1.0e-1", Meta::new(""))).unwrap().1,
-                Token::FloatLit(0.1)
+                Token::FloatLit(1.0e-1)
             );
             assert_eq!(
                 lex(Span::new_extra("1.0e+1", Meta::new(""))).unwrap().1,
-                Token::FloatLit(10.0)
+                Token::FloatLit(1.0e+1)
             );
             assert_eq!(
                 lex(Span::new_extra("1.0E1", Meta::new(""))).unwrap().1,
-                Token::FloatLit(10.0)
+                Token::FloatLit(1.0E1)
             );
             assert_eq!(
                 lex(Span::new_extra("1.0E-1", Meta::new(""))).unwrap().1,
-                Token::FloatLit(0.1)
+                Token::FloatLit(1.0E-1)
             );
             assert_eq!(
                 lex(Span::new_extra(".1E+1", Meta::new(""))).unwrap().1,
-                Token::FloatLit(1.0)
+                Token::FloatLit(0.1E+1)
             );
         }
     }
@@ -403,7 +463,7 @@ mod lex_int {
     use crate::error::{LexError, SourcedLexError};
 
     use super::*;
-    use nom::{sequence::preceded, Err};
+    use nom::{character::complete::i32, sequence::preceded, Err};
 
     fn hex(input: Span) -> LexResult<i32> {
         let (leftover, parsed) = preceded(tag_no_case("0x"), alphanumeric1)(input.clone())?;
@@ -442,15 +502,7 @@ mod lex_int {
     }
 
     fn dec(input: Span) -> LexResult<i32> {
-        let (leftover, parsed) = recognize(pair(digit1, alphanumeric1))(input.clone())?;
-        let parsed = parsed.fragment();
-        let ret = i32::from_str_radix(parsed, 10).map_err(|err| {
-            Err::Failure(SourcedLexError {
-                error: LexError::ParseIntError(err, *parsed),
-                span: input,
-            })
-        })?;
-        Ok((leftover, ret))
+        i32(input)
     }
 
     pub fn lex(input: Span) -> LexResult<Token> {

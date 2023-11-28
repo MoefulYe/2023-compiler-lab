@@ -12,7 +12,6 @@ int main(int argc, char *argv[]) {
     auto file = argv[i];
     auto cfg = CfgParser(Util::read_file_to_string(file)).parse();
     left_recursion_kill(cfg);
-    std::cout << cfg.to_string() << std::endl;
     extract_left_factor(cfg);
     std::cout << cfg.to_string() << std::endl;
     getchar();

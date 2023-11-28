@@ -6,10 +6,10 @@ use std::{
 };
 
 use lex::lex;
+pub mod error;
 pub mod lex;
 pub mod span;
 pub mod tokens;
-pub mod error;
 
 extern crate nom;
 extern crate nom_locate;

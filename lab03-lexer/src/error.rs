@@ -4,15 +4,17 @@ use std::{
     num::{ParseFloatError, ParseIntError},
 };
 
-use crate::span::Span;
+use crate::{span::Span, tokens::Token};
 use nom::{
     error::{ContextError, FromExternalError, ParseError},
     IResult,
 };
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum LexError<'a> {
+    #[error("eof")]
+    Eof,
     #[error("UnknownError: unknown error")]
     Unknown,
     #[error("UnexpectedChar: expected one of {1:?}, found `{0}`!")]
@@ -21,12 +23,24 @@ pub enum LexError<'a> {
     ParseFloatError(ParseFloatError, &'a str),
     #[error("ParseIntError: {1}, fail to parse `{0}`!")]
     ParseIntError(ParseIntError, &'a str),
+    #[error("EscapeCharError: escape char `{0}` is not supported!")]
+    EscapeCharError(char),
 }
 
 #[derive(Debug)]
 pub struct SourcedLexError<'a> {
     pub error: LexError<'a>,
     pub span: Span<'a>,
+}
+
+impl<'a> SourcedLexError<'a> {
+    pub fn is_eof(&self) -> bool {
+        if let LexError::Eof = self.error {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl Display for SourcedLexError<'_> {
@@ -56,10 +70,16 @@ impl<'a> ParseError<Span<'a>> for SourcedLexError<'a> {
     }
 
     fn from_char(input: Span<'a>, _: char) -> Self {
-        let unexpected = input.fragment().chars().next().unwrap();
-        SourcedLexError {
-            error: LexError::UnexpectedChar(unexpected, vec![]),
-            span: input,
+        if let Some(ch) = input.fragment().chars().next() {
+            SourcedLexError {
+                error: LexError::UnexpectedChar(ch, vec![]),
+                span: input,
+            }
+        } else {
+            SourcedLexError {
+                error: LexError::Eof,
+                span: input,
+            }
         }
     }
 
@@ -81,7 +101,7 @@ impl ContextError<Span<'_>> for SourcedLexError<'_> {
     }
 }
 
-pub type LexResult<'a, T> = IResult<Span<'a>, T, SourcedLexError<'a>>;
+pub type LexResult<'a, T = Token> = IResult<Span<'a>, T, SourcedLexError<'a>>;
 
 impl<'a> FromExternalError<Span<'a>, LexError<'a>> for SourcedLexError<'a> {
     fn from_external_error(input: Span<'a>, _: nom::error::ErrorKind, e: LexError<'a>) -> Self {
