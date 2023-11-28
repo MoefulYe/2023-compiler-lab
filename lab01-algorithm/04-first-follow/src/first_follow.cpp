@@ -1,5 +1,7 @@
 #include "./first_follow.h"
 #include "../../common/CFG.hpp"
+#include <algorithm>
+#include <iostream>
 
 SymbolSet first(ContextFreeGrammar &cfg, Map &memento,
                 const ContextFreeGrammar::ProductionRight &right);
@@ -91,6 +93,8 @@ Map solve_follows(ContextFreeGrammar &cfg, Map &firsts) {
                   follow_i = new_follow;
                   break;
                 }
+              } else if (ContextFreeGrammar::is_epsilon(symbol)) {
+                continue;
               } else {
                 auto new_follow = follow_i | SymbolSet{symbol};
                 flag = new_follow != follow_i;

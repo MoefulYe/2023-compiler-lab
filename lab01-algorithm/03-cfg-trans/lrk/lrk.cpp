@@ -1,4 +1,5 @@
 #include "../../common/CFG.hpp"
+#include <iostream>
 
 void rewrite(ContextFreeGrammar &cfg, ContextFreeGrammar::Symbol a_i,
              ContextFreeGrammar::Symbol a_j);
@@ -6,9 +7,42 @@ void rewrite(ContextFreeGrammar &cfg, ContextFreeGrammar::Symbol a_i,
 void handle_direct(ContextFreeGrammar &cfg,
                    ContextFreeGrammar::Symbol to_handle);
 
-// 不能存在推导出空产生式
+void handle_epsilon(ContextFreeGrammar &cfg) {
+  auto nonterminals = cfg.nonterminals();
+  for (auto noterm : nonterminals) {
+    auto &rights = cfg.produce(noterm);
+    for (int i = 0; i < rights.size(); i++) {
+      auto right = rights.at(i);
+      if (right.size() == 1 && right.front() == ContextFreeGrammar::EPSILON) {
+        rights.erase(rights.begin() + i);
+        for (auto to_handle : nonterminals) {
+          if (to_handle != noterm) {
+            auto &rights = cfg.produce(to_handle);
+            auto size = rights.size();
+            for (int i = 0; i < size; i++) {
+              if (rights.at(i).find(noterm) != string::npos) {
+                auto right = rights.at(i);
+                auto pos = right.find(noterm);
+                while (pos != string::npos) {
+                  right.erase(pos, 1);
+                  pos = right.find(noterm);
+                }
+                if (!right.empty()) {
+                  rights.push_back(right);
+                }
+              }
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+}
+
 // 不能推导出环
 void left_recursion_kill(ContextFreeGrammar &cfg) {
+  handle_epsilon(cfg);
   auto nonterminals = cfg.nonterminals();
   auto size = nonterminals.size();
   for (int i = 0; i < size; i++) {
