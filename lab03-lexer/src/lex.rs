@@ -1,6 +1,7 @@
 use crate::error::{LexError, LexResult, SourcedLexError};
 use crate::span::{Meta, Span};
 use crate::tokens::{ident_or_reserved, Token};
+use miette::{miette, LabeledSpan, NamedSource, Severity};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, tag_no_case, take_until};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, one_of};
@@ -10,14 +11,26 @@ use nom::sequence::{delimited, pair, tuple};
 use nom::Err;
 
 pub fn lex(filename: &str, input: &str) {
-    let input = Span::new_extra(input, Meta::new(filename));
-    let mut it = iterator(input, lex_token);
+    let span = Span::new_extra(input, Meta::new(filename));
+    let mut it = iterator(span, lex_token);
     it.for_each(|token| println!("{token}"));
     match it.finish().err() {
         Some(Err::Failure(err)) => {
-            if !err.is_eof() {
-                println!("{}", err)
+            if err.is_eof() {
+                return;
             }
+            let code = err.error.code();
+            let msg = err.error.to_string();
+            let labels = vec![LabeledSpan::at(err.span(), "here")];
+            let report = miette!(
+                severity = Severity::Error,
+                code = code,
+                labels = labels,
+                "{}",
+                msg
+            )
+            .with_source_code(NamedSource::new(filename, input.to_string()));
+            println!("{:?}", report);
         }
         Some(Err::Error(_)) => {
             unreachable!()

@@ -15,16 +15,29 @@ use thiserror::Error;
 pub enum LexError<'a> {
     #[error("eof")]
     Eof,
-    #[error("UnknownError: unknown error")]
+    #[error("unknown error")]
     Unknown,
-    #[error("UnexpectedChar: expected one of {1:?}, found `{0}`!")]
+    #[error("expected one of {1:?}, found `{0}`!")]
     UnexpectedChar(char, Vec<char>),
-    #[error("ParseFloatError: {1}, fail to parse `{0}`!")]
+    #[error("parse float literal {1} error, `{0}`!")]
     ParseFloatError(ParseFloatError, &'a str),
-    #[error("ParseIntError: {1}, fail to parse `{0}`!")]
+    #[error("parse int literal {1} error, `{0}`!")]
     ParseIntError(ParseIntError, &'a str),
     #[error("EscapeCharError: escape char `{0}` is not supported!")]
     EscapeCharError(char),
+}
+
+impl<'a> LexError<'a> {
+    pub fn code(&self) -> &'static str {
+        match self {
+            LexError::Eof => "eof",
+            LexError::Unknown => "unknown",
+            LexError::UnexpectedChar(_, _) => "unexpected_char",
+            LexError::ParseFloatError(_, _) => "parse_float_error",
+            LexError::ParseIntError(_, _) => "parse_int_error",
+            LexError::EscapeCharError(_) => "escape_char_error",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -41,18 +54,11 @@ impl<'a> SourcedLexError<'a> {
             false
         }
     }
-}
 
-impl Display for SourcedLexError<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let filename = self.span.extra.filename;
-        let line = self.span.location_line();
-        let column = self.span.get_column();
-        write!(f, "{}:{}:{}: {}", filename, line + 1, column, self.error)
+    pub fn span(&self) -> miette::SourceSpan {
+        self.span.location_offset().into()
     }
 }
-
-impl Error for SourcedLexError<'_> {}
 
 impl<'a> ParseError<Span<'a>> for SourcedLexError<'a> {
     fn from_error_kind(input: Span<'a>, _: nom::error::ErrorKind) -> Self {
