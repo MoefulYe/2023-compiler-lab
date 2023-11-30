@@ -10,7 +10,4 @@ int ifElse() {
   return (a);
 }
 
-
-int main() {
-  return (ifElse());
-}
+int main() { return (ifElse()); }

@@ -1,5 +1,3 @@
-const int x=4;
+const int x = 4;
 
-int main(){
-    return x;
-}
+int main() { return x; }
