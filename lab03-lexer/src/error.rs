@@ -1,8 +1,4 @@
-use std::{
-    error::Error,
-    fmt::Display,
-    num::{ParseFloatError, ParseIntError},
-};
+use std::num::{ParseFloatError, ParseIntError};
 
 use crate::{span::Span, tokens::Token};
 use nom::{
@@ -17,6 +13,8 @@ pub enum LexError<'a> {
     Eof,
     #[error("unknown error")]
     Unknown,
+    #[error("illegal token")]
+    IllegalToken,
     #[error("expected one of {1:?}, found `{0}`!")]
     UnexpectedChar(char, Vec<char>),
     #[error("parse float literal {1} error, `{0}`!")]
@@ -36,6 +34,7 @@ impl<'a> LexError<'a> {
             LexError::ParseFloatError(_, _) => "parse_float_error",
             LexError::ParseIntError(_, _) => "parse_int_error",
             LexError::EscapeCharError(_) => "escape_char_error",
+            LexError::IllegalToken => "illegal_token",
         }
     }
 }

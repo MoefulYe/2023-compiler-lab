@@ -82,7 +82,7 @@ pub fn lex_token(input: Span) -> LexResult<Token> {
             lex_punctuator,
             lex_ident_or_reserved,
             eof,
-            raise_failure(LexError::Unknown),
+            raise_failure(LexError::IllegalToken),
         )),
         skip,
     )(input)
