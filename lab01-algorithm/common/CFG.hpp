@@ -94,6 +94,9 @@ struct ContextFreeGrammar {
       this->_productions.insert({non_term, {}});
     }
   }
+  ContextFreeGrammar(Symbol start, NonterminalSet nonterminals,
+                     Productions productions)
+      : _start(start), _nonterminals(nonterminals), _productions(productions) {}
 
   ProductionRights &produce(Symbol nonterminal) {
     assert(is_nonterminal(nonterminal) && "expect nonterminal symbol");
@@ -133,6 +136,13 @@ struct ContextFreeGrammar {
   void alloc_nonterminal(Symbol nonterm) {
     this->_nonterminals.alloc(nonterm);
     this->_productions.insert({nonterm, {}});
+  }
+
+  ContextFreeGrammar clone() {
+    auto productions = this->_productions;
+    auto start = this->_start;
+    auto non = this->_nonterminals;
+    return ContextFreeGrammar(start, non, productions);
   }
 
 private:

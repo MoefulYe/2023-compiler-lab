@@ -49,6 +49,7 @@ struct SymbolSet : bitset<128> {
     }
   }
   void add_epsilon() { this->set(ContextFreeGrammar::EPSILON); }
+  void remove_epsilon() { this->reset(ContextFreeGrammar::EPSILON); }
 };
 
 #endif // !#ifndef SYMBOLSET_HPP

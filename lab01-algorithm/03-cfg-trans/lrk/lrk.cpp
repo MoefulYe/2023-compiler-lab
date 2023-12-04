@@ -1,5 +1,6 @@
 #include "../../common/CFG.hpp"
 #include <iostream>
+#include <optional>
 
 void rewrite(ContextFreeGrammar &cfg, ContextFreeGrammar::Symbol a_i,
              ContextFreeGrammar::Symbol a_j);
@@ -40,9 +41,29 @@ void handle_epsilon(ContextFreeGrammar &cfg) {
   }
 }
 
+std::optional<ContextFreeGrammar::Symbol> find_epsilon(ContextFreeGrammar &cfg,
+                                                       string_view nons) {
+  for (auto non : nons) {
+    auto &rights = cfg.produce(non);
+    for (int i = 0; i < rights.size(); i++) {
+      auto right = rights.at(i);
+      if (right.size() == 1 && right.front() == ContextFreeGrammar::EPSILON) {
+        rights.erase(rights.begin() + i);
+        return {non};
+      }
+    }
+  }
+  return {};
+}
+
+void remove_(ContextFreeGrammar &cfg, string_view nons,
+             ContextFreeGrammar::Symbol to_remove) {
+  for (auto to_handle : nons) {
+  }
+}
+
 // 不能推导出环
 void left_recursion_kill(ContextFreeGrammar &cfg) {
-  handle_epsilon(cfg);
   auto nonterminals = cfg.nonterminals();
   auto size = nonterminals.size();
   for (int i = 0; i < size; i++) {
