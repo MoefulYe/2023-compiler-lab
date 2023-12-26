@@ -1,3 +1,3 @@
 [submodule "ycc"]
-	path = lab04-ycc
+	path = ycc
 	url = git@github.com:MoefulYe/ycc.git
